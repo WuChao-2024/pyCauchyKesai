@@ -327,7 +327,11 @@ TypeError: __call__(): incompatible function arguments. The following argument t
     1. (self: libpyCauchyKesai.CauchyKesai, inputs: List[numpy.ndarray], task_id: int = 0, priority: int = 0) -> List[numpy.ndarray]
 ```
 
-
+2. ImportError: /root/miniconda3/envs/rdt/bin/../lib/libstdc++.so.6: version `GLIBCXX_3.4.30' not found (required by /usr/hobot/lib/libhbucp.so)
+这个错误是一个典型的 C++ 标准库版本不兼容 问题，升级conda环境的依赖即可
+```bash
+conda install libstdcxx-ng -c conda-forge
+```
 
 
 # 声明
