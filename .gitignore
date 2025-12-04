@@ -12,9 +12,12 @@
 *.pch
 
 # Compiled Dynamic libraries
+
 *.so
+!Nash/lib/*.so
 *.dylib
 *.dll
+
 
 # Fortran module files
 *.mod
@@ -34,3 +37,6 @@
 
 *build*
 *.vscode*
+*__pycache__
+
+*linux_aarch64.whl

@@ -1,5 +1,9 @@
 ![](sources/imgs/CauchyKesai.jpeg)
 
+## Summary
+
+Python版本: https://devguide.python.org/versions/
+
 ## Quick Start
 
 ```python
@@ -51,7 +55,7 @@ CauchyKesai(
 
 1. 用于初始化模型.
 2. n_task 参数用于在对象的内部初始化多组完整的推理环境, 包括开辟对应的输入输出Tensor的内存, 对应的任务初始化句柄, 可以在多线程任务或者异步任务中使用不同的n_task来推理, 避免内存踩踏等异常现象, 也避免边运行边推理时malloc内存的低效行为.
-3. model_cnt_select 参数设计用于pack模型的推理, 默认选择第0个模型. C/C++接口是支持pack的多个模型一次加载反复推理的, 这里我就不写了, 太累了。
+3. model_cnt_select 参数设计用于pack模型的推理, 默认选择第0个模型. C/C++接口是支持pack的多个模型一次加载反复推理的, 这里我就不写了, 太累了。对packed的模型, 加载两次就行了. 
 
 
 ### Print Model Summarys
@@ -196,6 +200,9 @@ compiler_parameters:
   optimize_level: 'O2'
 ```  
 
+### NCHWRGB / NHWCRGB input
+
+### YUV420SP(nv12) input
 
 ## 替换OpenExplore的头文件和动态库
 
@@ -261,9 +268,9 @@ cp -r ./include/hobot /usr/include/
 
 查看动态库中的版本号
 ```bash
-strings /usr/hobot/lib/libhbucp.so | grep SO_VERSION
-```
-```bash
+strings </path/to/your/libhbucp.so> | grep SO_VERSION
+# example
+$ strings /usr/hobot/lib/libhbucp.so | grep SO_VERSION
 SO_VERSION = (3U).(7U).(4U)
 ```
 
@@ -285,8 +292,13 @@ echo -e "\n$file Version: $VERSION_MAJOR.$VERSION_MINOR.$VERSION_PATCH\n"
 
 ```bash
 git clone https://github.com/WuChao-2024/pyCauchyKesai.git
-cd pyCauchyKesai/Nash  # Optional
-cd pyCauchyKesai/Bayes # Optional
+cd pyCauchyKesai/Nash  
+```
+
+在您的Python环境中构建wheel, 推荐Python 3.12, 原则上可支持宽泛版本.
+```bash
+pip install scikit-build-core pybind11
+pip wheel .
 ```
 
 编译和安装

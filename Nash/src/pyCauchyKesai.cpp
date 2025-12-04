@@ -58,7 +58,6 @@ std::string dtype_np2str(const py::dtype &dt)
         return "uint64";
     if (dt.is(py::dtype::of<bool>()))
         return "bool";
-
     return "unknown";
 }
 py::dtype dtype_str2np(const std::string &dtype_str)
@@ -225,7 +224,7 @@ CauchyKesai::CauchyKesai(const std::string &model_path, int32_t n_task = 1, int3
             hbDNNGetOutputTensorProperties(&output_properties, dnn_handle, i),
             "hbDNNGetInputTensorProperties failed");
         // 输出头数据类型
-        outputs_dtype.push_back(dtype_ucp2str(input_properties));
+        outputs_dtype.push_back(dtype_ucp2str(output_properties));
 
         // 输出头名称
         char const *output_name;

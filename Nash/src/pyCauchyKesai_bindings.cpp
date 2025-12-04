@@ -5,10 +5,10 @@
 
 namespace py = pybind11;
 
-PYBIND11_MODULE(libpyCauchyKesai, m)
+PYBIND11_MODULE(pyCauchyKesai, m)
 {
      // 添加模块元信息
-     m.attr("__version__") = "0.0.7";                            // 版本号
+     m.attr("__version__") = "0.0.8";                            // 版本号
      m.attr("__author__") = "Cauchy - WuChao in D-Robotics";     // 作者
      m.attr("__date__") = "2025-05-30";                          // 日期
      m.attr("__doc__") = "GNU AFFERO GENERAL PUBLIC LICENSE Version 3"; // 模块描述

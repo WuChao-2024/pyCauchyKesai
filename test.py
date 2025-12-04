@@ -12,4 +12,4 @@ o = m([y, uv])[0]
 o.shape
 
 
-m([y, torch.from_numpy(uv)])[0].shape
+m([y, uv])[0].shape

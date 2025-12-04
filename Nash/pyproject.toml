@@ -1,0 +1,20 @@
+[build-system]
+requires = ["scikit-build-core", "pybind11"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "pyCauchyKesai"
+version = "0.0.8"
+description = "Python bindings for CauchyKesai (HOBOT platform)"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX :: Linux",
+]
+
+[tool.scikit-build]
+cmake.args = [
+    "-DPYTHON_BINDINGS=ON",
+]
+wheel.packages = ["pyCauchyKesai"]  # 或指定生成的模块路径
