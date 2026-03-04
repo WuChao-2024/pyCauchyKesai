@@ -90,14 +90,16 @@ py::dtype dtype_str2np(const std::string &dtype_str)
 
 CauchyKesai::CauchyKesai(const std::string &model_path, int32_t n_task = 1, int32_t model_cnt_select = 0)
 {
+    auto warnings = py::module_::import("warnings");
+
     if (n_task <= 0)
     {
-        std::cout << "[CauchyKesai][W] n_task <= 0, let: n_task = 1;" << std::endl;
+        warnings.attr("warn")("n_task <= 0, clamped to 1", py::module_::import("builtins").attr("UserWarning"));
         n_task = 1;
     }
     else if (n_task > 32)
     {
-        std::cout << "[CauchyKesai][W] n_task > 32, let: n_task = 32;" << std::endl;
+        warnings.attr("warn")("n_task > 32, clamped to 32", py::module_::import("builtins").attr("UserWarning"));
         n_task = 32;
     }
     n_task_ = n_task;
@@ -127,16 +129,23 @@ CauchyKesai::CauchyKesai(const std::string &model_path, int32_t n_task = 1, int3
     model_cnt_select_ = model_cnt_select;
     if (model_count > 1)
     {
-        std::cout << "[CauchyKesai][W] model_count: " << model_count << ", will select only 1." << std::endl;
+        warnings.attr("warn")(
+            "Packed model contains " + std::to_string(model_count) + " models, will select only 1",
+            py::module_::import("builtins").attr("UserWarning"));
     }
-    else if (model_cnt_select_ >= model_count)
+    if (model_cnt_select_ >= model_count)
     {
-        std::cout << "[CauchyKesai][W] model_cnt_select > model_count, let: model_cnt_select_ = model_count-1" << std::endl;
+        warnings.attr("warn")(
+            "model_cnt_select (" + std::to_string(model_cnt_select_) +
+            ") >= model_count (" + std::to_string(model_count) + "), clamped to " + std::to_string(model_count - 1),
+            py::module_::import("builtins").attr("UserWarning"));
         model_cnt_select_ = model_count - 1;
     }
     else if (model_cnt_select_ < 0)
     {
-        std::cout << "[CauchyKesai][W] model_cnt_select < 0, let: model_cnt_select_ = 0" << std::endl;
+        warnings.attr("warn")(
+            "model_cnt_select < 0, clamped to 0",
+            py::module_::import("builtins").attr("UserWarning"));
         model_cnt_select_ = 0;
     }
 
@@ -259,6 +268,33 @@ CauchyKesai::CauchyKesai(const std::string &model_path, int32_t n_task = 1, int3
         // std::cout << "t: " <<t << std::endl;
         is_infer[t] = 0;
     }
+
+    // 构建 ION 内存的 numpy 视图（零拷贝）
+    input_tensors.resize(n_task_);
+    for (int32_t t = 0; t < n_task_; t++)
+    {
+        for (int32_t i = 0; i < input_count; i++)
+        {
+            input_tensors[t].push_back(
+                py::array(dtype_str2np(inputs_dtype[i]), inputs_shape[i],
+                          inputs_hbTensor[t][i].sysMem.virAddr));
+        }
+    }
+
+    output_tensors.resize(n_task_);
+    for (int32_t t = 0; t < n_task_; t++)
+    {
+        for (int32_t i = 0; i < output_count; i++)
+        {
+            output_tensors[t].push_back(
+                py::array(dtype_str2np(outputs_dtype[i]), outputs_shape[i],
+                          outputs_hbTensor[t][i].sysMem.virAddr));
+        }
+    }
+
+    // 名称列表
+    input_names  = inputs_name;
+    output_names = outputs_name;
 }
 
 CauchyKesai::~CauchyKesai()
@@ -277,53 +313,70 @@ CauchyKesai::~CauchyKesai()
     std::cout << " success." << std::endl;
 }
 
-void CauchyKesai::s()
+bool CauchyKesai::is_busy(int32_t task_id) const
 {
-    std::cout << "================== Model Summarys ==================" << std::endl;
-    // 模型路径
-    std::cout << "\033[1;31m" << "Model File: " << "\033[0m" << model_path_ << std::endl;
-
-    // 总的模型名称
-    std::cout << "\033[1;31m" << "Model Names: " << "\033[0m" << std::endl;
-    for (int32_t i = 0; i < model_count; i++)
+    if (task_id < 0 || task_id >= n_task_)
     {
-        if (i == model_cnt_select_)
-            std::cout << i << ": " << name_list[i] << " [*Select]" << std::endl;
-        else
-            std::cout << i << ": " << name_list[i] << std::endl;
+        throw std::out_of_range(
+            "task_id out of range: got " + std::to_string(task_id) +
+            ", valid range [0, " + std::to_string(n_task_ - 1) + "]");
     }
-
-    // task n
-    std::cout << "\033[1;31m" << "Task N: " << "\033[0m" << n_task_ << std::endl;
-
-    // 输入输出占用tensor的aligned byte size (MB)
-    std::cout << "\033[1;31m" << "Inputs/Outputs AlignedByteSize: " << "\033[0m" << mbs << "MB." << std::endl;
-
-    // 模型输入信息
-    std::cout << "\033[1;31m" << "Inputs Info: " << "\033[0m" << std::endl;
-    for (int32_t i = 0; i < input_count; i++)
-    {
-        std::cout << "[" << i << "]";
-        std::cout << "[" << inputs_name[i] << "]: " << inputs_dtype[i] << ", (";
-        for (int32_t j = 0; j < inputs_numDimension[i]; j++)
-            std::cout << inputs_shape[i][j] << ", ";
-        std::cout << ")" << std::endl;
-    }
-
-    // 模型输出信息
-    std::cout << "\033[1;31m" << "Outputs Info: " << "\033[0m" << std::endl;
-    for (int32_t i = 0; i < output_count; i++)
-    {
-        std::cout << "[" << i << "]";
-        std::cout << "[" << outputs_name[i] << "]: " << outputs_dtype[i] << ", (";
-        for (int32_t j = 0; j < outputs_numDimension[i]; j++)
-            std::cout << outputs_shape[i][j] << ", ";
-        std::cout << ")" << std::endl;
-    }
-    std::cout << "====================================================" << std::endl;
+    return is_infer[task_id] != 0;
 }
 
-void CauchyKesai::t()
+py::dict CauchyKesai::s()
+{
+    // 构建结构化数据
+    py::list model_names_list;
+    for (int32_t i = 0; i < model_count; i++)
+    {
+        py::dict entry;
+        entry["index"]    = i;
+        entry["name"]     = std::string(name_list[i]);
+        entry["selected"] = (i == model_cnt_select_);
+        model_names_list.append(entry);
+    }
+
+    py::list inputs_list;
+    for (int32_t i = 0; i < input_count; i++)
+    {
+        py::dict inp;
+        inp["index"] = i;
+        inp["name"]  = inputs_name[i];
+        inp["dtype"] = inputs_dtype[i];
+        py::list shape;
+        for (int32_t j = 0; j < inputs_numDimension[i]; j++)
+            shape.append(inputs_shape[i][j]);
+        inp["shape"] = shape;
+        inputs_list.append(inp);
+    }
+
+    py::list outputs_list;
+    for (int32_t i = 0; i < output_count; i++)
+    {
+        py::dict out;
+        out["index"] = i;
+        out["name"]  = outputs_name[i];
+        out["dtype"] = outputs_dtype[i];
+        py::list shape;
+        for (int32_t j = 0; j < outputs_numDimension[i]; j++)
+            shape.append(outputs_shape[i][j]);
+        out["shape"] = shape;
+        outputs_list.append(out);
+    }
+
+    py::dict result;
+    result["model_path"]   = model_path_;
+    result["model_names"]  = model_names_list;
+    result["n_task"]       = n_task_;
+    result["memory_mb"]    = mbs;
+    result["inputs"]       = inputs_list;
+    result["outputs"]      = outputs_list;
+
+    return result;
+}
+
+py::dict CauchyKesai::t()
 {
     int32_t task_id = 0;
 
@@ -377,12 +430,13 @@ void CauchyKesai::t()
     double time_s = total_time / 1000000.0;          // 秒
     double time_min = total_time / (1000000.0 * 60); // 分钟
 
-    std::cout.precision(6); // 设置浮点数输出精度
-    std::cout << "\033[1;31m" << "Inference Info: " << "\033[0m" << std::endl;
-    std::cout << "Time in microseconds: " << time_us << " μs" << std::endl;
-    std::cout << "Time in milliseconds: " << time_ms << " ms" << std::endl;
-    std::cout << "Time in seconds:      " << time_s << " s" << std::endl;
-    std::cout << "Time in minutes:      " << time_min << " min" << std::endl;
+    py::dict result;
+    result["time_us"]  = time_us;
+    result["time_ms"]  = time_ms;
+    result["time_s"]   = time_s;
+    result["time_min"] = time_min;
+
+    return result;
 }
 
 void CauchyKesai::start(const std::vector<py::array> &inputs, int32_t task_id, int32_t priority)
@@ -391,17 +445,24 @@ void CauchyKesai::start(const std::vector<py::array> &inputs, int32_t task_id, i
     is_infer[task_id] = 1;
 
     // 将array的数据拷贝进输入Tensor, 并刷新带Cache的内存
-    for (int32_t i = 0; i < input_count; i++)
+    // 如果 inputs 为空，说明用户已通过 input_tensors 零拷贝写入，跳过拷贝只刷 cache
+    if (!inputs.empty())
     {
-        std::memcpy(inputs_hbTensor[task_id][i].sysMem.virAddr, inputs[i].data(), inputs[i].nbytes());
-        // std::cout << "[CauchyKesai][D] inputs[" << i << "].nbytes() = " << inputs[i].nbytes() << std::endl;
+        for (int32_t i = 0; i < input_count; i++)
+        {
+            // 确保数组是 C 连续的
+            // 如果已经是 C 连续，ensure() 不会拷贝，直接返回原数组引用
+            // 如果不连续，ensure() 会创建一个 C 连续的副本
+            py::array contiguous_input = py::array::ensure(inputs[i], py::array::c_style);
+            std::memcpy(inputs_hbTensor[task_id][i].sysMem.virAddr, contiguous_input.data(), contiguous_input.nbytes());
+        }
     }
     for (int32_t i = 0; i < input_count; i++)
     {
-        hbUCPMemFlush(&inputs_hbTensor[task_id][i].sysMem, HB_SYS_MEM_CACHE_INVALIDATE);
+        hbUCPMemFlush(&inputs_hbTensor[task_id][i].sysMem, HB_SYS_MEM_CACHE_CLEAN);
     }
 
-    // BPU推理任务
+    // BPU推理任务（提交后释放 GIL，让其他 Python 线程可以运行）
     hbUCPTaskHandle_t task_handle{nullptr};
 
     RDK_CHECK_SUCCESS(
@@ -410,21 +471,26 @@ void CauchyKesai::start(const std::vector<py::array> &inputs, int32_t task_id, i
     hbUCPSchedParam ctrl_param;
 
     HB_UCP_INITIALIZE_SCHED_PARAM(&ctrl_param);
-    ctrl_param.priority = priority; // HB_UCP_PRIORITY_LOWEST;
-    // ctrl_param.deviceId = 0;
-    // ctrl_param.customId = 0;
+    ctrl_param.priority = priority;
     ctrl_param.backend = HB_UCP_BPU_CORE_ANY;
-    RDK_CHECK_SUCCESS(hbUCPSubmitTask(task_handle, &ctrl_param),
-                      "hbUCPSubmitTask failed");
+
+    {
+        py::gil_scoped_release release;
+        RDK_CHECK_SUCCESS(hbUCPSubmitTask(task_handle, &ctrl_param),
+                          "hbUCPSubmitTask failed");
+    }
 
     task_handles[task_id] = task_handle;
 }
 
 std::vector<py::array> CauchyKesai::wait(int32_t task_id)
 {
-    // 等待推理结束
-    RDK_CHECK_SUCCESS(hbUCPWaitTaskDone(task_handles[task_id], 0),
-                      "hbUCPWaitTaskDone failed");
+    // 等待推理结束：释放 GIL，让其他 Python 线程在 BPU 运行期间可以被调度
+    {
+        py::gil_scoped_release release;
+        RDK_CHECK_SUCCESS(hbUCPWaitTaskDone(task_handles[task_id], 0),
+                          "hbUCPWaitTaskDone failed");
+    }
 
     // 刷新带Cache的内存
     for (int i = 0; i < output_count; i++)
@@ -456,98 +522,73 @@ std::vector<py::array> CauchyKesai::inference(const std::vector<py::array> &inpu
     // task id 检查
     if (task_id < 0 || task_id >= n_task_)
     {
-        std::cout << "[CauchyKesai][E] Task ID out of range, task_id: " << task_id << ", n_task: " << n_task_ << std::endl;
-        return std::vector<py::array>();
+        throw std::out_of_range(
+            "task_id out of range: got " + std::to_string(task_id) +
+            ", valid range [0, " + std::to_string(n_task_ - 1) + "]");
     }
 
-    // priority检查
+    // priority 检查
     if (priority < 0 || priority > 255)
     {
-        std::cout << "[CauchyKesai][E] Priority out of range, Expected: [0, 255], Got: " << priority << "." << std::endl;
-        return std::vector<py::array>();
+        throw std::out_of_range(
+            "priority out of range: got " + std::to_string(priority) +
+            ", valid range [0, 255]");
     }
 
-    // 传入list的len()检查
-    if (inputs.size() != input_count)
+    // 输入数量检查
+    if ((int32_t)inputs.size() != input_count)
     {
-        std::cout << "[CauchyKesai][E] Input Conut Not Match, input_count: " << input_count << ", inputs.size(): " << inputs.size() << std::endl;
-        return std::vector<py::array>();
+        throw std::invalid_argument(
+            "input count mismatch: expected " + std::to_string(input_count) +
+            ", got " + std::to_string(inputs.size()));
     }
 
-    // 传入list[np.array]的dtype检查
-    for (size_t cnt = 0; cnt < input_count; cnt++)
+    // dtype / ndim / shape 检查
+    for (int32_t cnt = 0; cnt < input_count; cnt++)
     {
-        if (inputs_dtype[cnt] != dtype_np2str(inputs[cnt].dtype()))
+        // dtype
+        std::string got_dtype = dtype_np2str(inputs[cnt].dtype());
+        if (inputs_dtype[cnt] != got_dtype)
         {
-            std::cout << "[CauchyKesai][E] ERROR Data Type, input cnt: " << cnt << std::endl;
-            return std::vector<py::array>();
+            throw std::invalid_argument(
+                "dtype mismatch at input[" + std::to_string(cnt) + "] '" + inputs_name[cnt] +
+                "': expected " + inputs_dtype[cnt] + ", got " + got_dtype);
         }
-        // std::cout << "[CauchyKesai][I] Data Type Check Success, input cnt: " << cnt << std::endl;
-    }
 
-    // 传入list[np.array]的ndim检查
-    for (size_t cnt = 0; cnt < input_count; cnt++)
-    {
+        // ndim
         if (inputs[cnt].ndim() != inputs_numDimension[cnt])
         {
-            std::cout << "[CauchyKesai][E] ERROR Data Dimension, input cnt: " << cnt;
-            std::cout << ", Expected ndim:" << inputs_numDimension[cnt];
-            std::cout << ", Got ndim: " << inputs[cnt].ndim() << ". " << std::endl;
-            return std::vector<py::array>();
+            throw std::invalid_argument(
+                "ndim mismatch at input[" + std::to_string(cnt) + "] '" + inputs_name[cnt] +
+                "': expected " + std::to_string(inputs_numDimension[cnt]) +
+                ", got " + std::to_string(inputs[cnt].ndim()));
         }
-        // std::cout << "[CauchyKesai][I] Data Dimension Check Success, input cnt: " << cnt << std::endl;
-    }
 
-    // 传入list[np.array]的stride检查
-    for (size_t cnt = 0; cnt < input_count; cnt++)
-    {
-        ssize_t prev_stride = 0;
+        // shape
         for (int i = 0; i < inputs[cnt].ndim(); ++i)
         {
-            ssize_t current_stride = inputs[cnt].strides()[i];
-            if (i > 0 && current_stride > prev_stride)
+            if (inputs_shape[cnt][i] != (size_t)inputs[cnt].shape()[i])
             {
-                std::cout << "[CauchyKesai][E] ERROR Stride, input cnt: " << cnt << ", Strides: (";
-                for (int i = 0; i < inputs[cnt].ndim(); ++i)
-                {
-                    std::cout << inputs[cnt].strides()[i] << ", ";
-                }
-                std::cout << "), please use numpy.ndarray.copy() first." << std::endl;
-                return std::vector<py::array>();
-            }
-            prev_stride = current_stride;
-        }
-        // std::cout << "[CauchyKesai][I] Stride Check Success, input cnt: " << cnt << std::endl;
-    }
-
-    // 传入list[np.array]的shape检查
-    for (size_t cnt = 0; cnt < input_count; cnt++)
-    {
-        for (int i = 0; i < inputs[cnt].ndim(); ++i)
-        {
-            if (inputs_shape[cnt][i] != inputs[cnt].shape()[i])
-            {
-                std::cout << "[CauchyKesai][E] ERROR array shape, input cnt: " << cnt << ", Expected: (";
-                for (int i = 0; i < inputs[cnt].ndim(); ++i)
-                {
-                    std::cout << inputs_shape[cnt][i] << ", ";
-                }
-                std::cout << "), Got: (";
-                for (int i = 0; i < inputs[cnt].ndim(); ++i)
-                {
-                    std::cout << inputs[cnt].shape()[i] << ", ";
-                }
-                std::cout << ")" << std::endl;
-                return std::vector<py::array>();
+                // 构造 expected shape 字符串
+                std::string expected = "(";
+                for (int j = 0; j < inputs_numDimension[cnt]; ++j)
+                    expected += std::to_string(inputs_shape[cnt][j]) + (j + 1 < inputs_numDimension[cnt] ? ", " : ")");
+                // 构造 got shape 字符串
+                std::string got = "(";
+                for (int j = 0; j < inputs[cnt].ndim(); ++j)
+                    got += std::to_string(inputs[cnt].shape()[j]) + (j + 1 < inputs[cnt].ndim() ? ", " : ")");
+                throw std::invalid_argument(
+                    "shape mismatch at input[" + std::to_string(cnt) + "] '" + inputs_name[cnt] +
+                    "': expected " + expected + ", got " + got);
             }
         }
-        // std::cout << "[CauchyKesai][I] Array shape Check Success, input cnt: " << cnt << std::endl;
     }
 
+    // task 占用检查
     if (is_infer[task_id])
     {
-        std::cout << "[CauchyKesai][E] ERROR task_id: " << task_id << ", used." << std::endl;
-        return std::vector<py::array>();
+        throw std::runtime_error(
+            "task_id " + std::to_string(task_id) + " is already in use");
     }
 
     start(inputs, task_id, priority);

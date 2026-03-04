@@ -49,11 +49,22 @@ public:
   // ACTPloicyRGBEncoder();
   CauchyKesai(const std::string &model_path, int32_t n_task, int32_t model_cnt_select);
   ~CauchyKesai();
-  void s();
-  void t();
+  py::dict s();
+  py::dict t();
+  bool is_busy(int32_t task_id) const;
   void start(const std::vector<py::array> &inputs, int32_t task_id, int32_t priority);
   std::vector<py::array> wait(int32_t task_id);
   std::vector<py::array> inference(const std::vector<py::array> &inputs, int32_t task_id, int32_t priority);
+
+  // 暴露给 Python 的 ION 内存视图
+  // input_tensors[task_id][input_idx] -> numpy array view of ION memory
+  std::vector<std::vector<py::array>> input_tensors;
+  // output_tensors[task_id][output_idx] -> numpy array view of ION memory
+  std::vector<std::vector<py::array>> output_tensors;
+  // 输入输出名称
+  std::vector<std::string> input_names;
+  std::vector<std::string> output_names;
+
 private:
   std::string model_path_;
   const char *modelFileName;

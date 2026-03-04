@@ -1,148 +1,837 @@
+![](sources/imgs/CauchyKesai.jpeg)
+
 # pyCauchyKesai
-RDK Tools
 
+pyCauchyKesai is a Python inference interface library designed for the Horizon Robotics BPU platform. Built on C++ implementations wrapped via pybind11, it enables Python developers to efficiently load and run `.hbm` neural network models on edge AI chips such as Nash-e and Nash-m.
 
-
-以下是根据你提供的 C++ 类 `CauchyKesai` 和其 pybind11 接口生成的 **英文版接口文档（API Documentation）**，适用于技术文档、SDK 说明或开发者手册。
-
----
-
-# 📘 `CauchyKesai` API Reference (English)
-
-The `CauchyKesai` class is a C++ implementation for loading and running BPU models, exposed to Python via `pybind11`. It supports multi-task inference, asynchronous execution, performance profiling, and safe model interaction.
+- Version: `0.0.8`
+- Platform: Linux aarch64 (Horizon RDK series development boards)
+- Python: >= 3.10
+- License: GNU AGPL v3
 
 ---
 
-## 🔧 Constructor
+## AI Native Design Philosophy
+
+pyCauchyKesai is an **AI Native** inference interface, designed from the ground up with AI Agent use cases in mind, allowing LLMs to directly understand and invoke edge NPU models.
+
+### Core Features
+
+**1. Dual-Mode Output: Structured + Human-Friendly**
+
+Traditional interfaces output via `print()`, which is invisible to Agents. pyCauchyKesai's `.s()` and `.t()` methods return **objects that can be both printed for formatting and accessed structurally**:
 
 ```python
-CauchyKesai(model_path: str, n_task: int = 1, model_cnt_select: int = 0)
+# Humans view formatted output directly in the terminal
+model.s()
+# ================== Model Summarys ==================
+# Model File: /opt/.../yolov8.hbm
+# Inputs Info:
+# [0][images_y]: uint8, (1, 640, 640, 1, )
+# ...
+
+# Agents access data structurally
+info = model.s()
+input_shape = info['inputs'][0]['shape']  # [1, 640, 640, 1]
+input_dtype = info['inputs'][0]['dtype']  # 'uint8'
 ```
 
-### Parameters:
+**2. Precise Exception Handling**
 
-| Parameter | Type | Default | Description |
-|----------|------|---------|-------------|
-| `model_path` | `str` | — | Path to the BPU model file (e.g., `.hbmodel`) |
-| `n_task` | `int` | `1` | Number of concurrent tasks allowed |
-| `model_cnt_select` | `int` | `0` | Model index selector (used in multi-model scenarios) |
-
----
-
-## 📚 Public Methods
-
-### 1. `.summ()`
-- **Description**: Prints a summary of the model's input/output tensor properties.
-- **Returns**: None
-- **Example**:
-  ```python
-  model.summ()
-  ```
-
----
-
-### 2. `.t()`
-- **Description**: Runs one dirty inference pass and prints performance metrics (e.g., latency, throughput).
-- **Returns**: None
-- **Example**:
-  ```python
-  model.t()
-  ```
-
----
-
-### 3. `.start(inputs: List[np.ndarray], task_id: int = 0, priority: int = 0)`
-- **Description**: Starts an asynchronous inference task.
-- **Parameters**:
-  | Parameter | Type | Default | Description |
-  |----------|------|---------|-------------|
-  | `inputs` | `List[np.ndarray]` | — | List of input tensors as NumPy arrays |
-  | `task_id` | `int` | `0` | Task ID for identifying this inference request |
-  | `priority` | `int` | `0` | Priority level (higher value means higher priority) |
-- **Returns**: None (use `.wait()` to retrieve results)
-
----
-
-### 4. `.wait(task_id: int = 0) -> List[np.ndarray]`
-- **Description**: Waits for the specified task to complete and returns output tensors with zero-copy optimization.
-- **Parameters**:
-  | Parameter | Type | Default | Description |
-  |----------|------|---------|-------------|
-  | `task_id` | `int` | `0` | The task ID to wait for |
-- **Returns**: `List[np.ndarray]` - Output tensors as NumPy arrays
-
----
-
-### 5. `.inference(inputs: List[np.ndarray], task_id: int = 0, priority: int = 0) -> List[np.ndarray]`
-- **Description**: Safe call that performs: check + start + wait. Suitable for one-time inference.
-- **Parameters**:
-  | Parameter | Type | Default | Description |
-  |----------|------|---------|-------------|
-  | `inputs` | `List[np.ndarray]` | — | Input tensors |
-  | `task_id` | `int` | `0` | Task ID |
-  | `priority` | `int` | `0` | Task priority |
-- **Returns**: `List[np.ndarray]` - Output tensors
-
----
-
-### 6. `__call__(inputs: List[np.ndarray], task_id: int = 0, priority: int = 0) -> List[np.ndarray]`
-- **Description**: Callable interface, equivalent to `.inference(...)`.
-- **Example**:
-  ```python
-  outputs = model([input1, input2])
-  ```
-
----
-
-## 🧠 Internal Member Variables (for reference only)
-
-| Variable Name | Type | Description |
-|---------------|------|-------------|
-| `model_path_` | `std::string` | Model path string |
-| `n_task_` | `int32_t` | Max number of concurrent tasks |
-| `is_infer` | `std::vector<int>` | Inference status per task |
-| `task_handles` | `std::vector<hbUCPTaskHandle_t>` | Task handle list |
-| `packed_dnn_handle`, `dnn_handle` | `hbDNN*` | DNN runtime handles |
-| `input_properties`, `output_properties` | `hbDNNTensorProperties` | Tensor metadata |
-| `inputs_shape`, `outputs_shape` | `std::vector<std::vector<size_t>>` | Input/output shapes |
-| `inputs_dtype`, `outputs_dtype` | `std::vector<std::string>` | Data types (e.g., float32, uint8) |
-
----
-
-## 🧪 Example Usage (Python)
+Traditional interfaces print error messages and return empty lists upon failure, leaving Agents unaware. pyCauchyKesai raises exceptions with detailed descriptions, allowing Agents to catch and automatically correct them:
 
 ```python
-import cauchy_kesai as ck
+try:
+    outputs = model([wrong_input])
+except ValueError as e:
+    # ValueError: shape mismatch at input[0] 'images_y': expected (1, 640, 640, 1), got (1, 480, 640, 1)
+    # The Agent can parse the error message, automatically adjust the input shape, and retry
+    pass
+```
+
+Exception Types:
+- `IndexError`: `task_id` or `priority` out of range
+- `ValueError`: Mismatch in input count, dtype, ndim, or shape
+- `RuntimeError`: Task already occupied, or underlying BPU call failed
+
+**3. Automatic Memory Continuity Handling**
+
+Arrays generated by Agents may undergo operations like `transpose()` or slicing, resulting in non-C-contiguous memory. pyCauchyKesai automatically detects and converts these at the C++ layer, sparing Agents from worrying about low-level details:
+
+```python
+# Non-contiguous arrays generated by Agents can be passed directly
+x = data.transpose(0, 2, 3, 1)  # Non-C-contiguous
+outputs = model([x])  # Automatically handled; no need for manual np.ascontiguousarray()
+```
+
+**4. Zero-Copy High-Performance Path**
+
+For performance-sensitive scenarios, ION memory views (`input_tensors` / `output_tensors`) are exposed, allowing Agents to directly manipulate hardware memory and avoid CPU-NPU data transfers:
+
+```python
+# Agents can directly write to NPU-accessible physical memory
+np.copyto(model.input_tensors[0][0], my_data)
+model.start([], task_id=0)
+result = model.output_tensors[0][0]  # Zero-copy read
+```
+
+**5. Catchable Construction Warnings**
+
+Traditional interfaces only print parameter corrections (e.g., truncating `n_task`) to stdout during construction, making them invisible to Agents. pyCauchyKesai uses Python's standard `warnings` module, allowing Agents to capture and respond using `warnings.catch_warnings()`:
+
+```python
+import warnings
+
+with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
+    model = pyCauchyKesai.CauchyKesai(path, n_task=99)
+    if w:
+        # UserWarning: n_task > 32, clamped to 32
+        # Agents can log this or adjust subsequent logic
+        print(w[0].message)
+```
+
+**6. Task Status Query `is_busy()`**
+
+Agents scheduling multiple tasks need to know which task slots are free without relying on try/except probing:
+
+```python
+model = pyCauchyKesai.CauchyKesai(path, n_task=4)
+
+# Agents can actively query and select a free slot
+free_slot = next(i for i in range(4) if not model.is_busy(i))
+model.start(inputs, task_id=free_slot)
+```
+
+**7. Self-Describing Model Object `__repr__`**
+
+Using `print(model)` or referencing the model object directly in a REPL/Agent context immediately provides key information without needing to call `.s()`:
+
+```python
+print(model)
+# CauchyKesai(model='yolov8n_640x640_nv12', inputs=2, outputs=6, n_task=4)
+
+# During inference, the busy status is also reflected
+# CauchyKesai(model='yolov8n_640x640_nv12', inputs=2, outputs=6, n_task=4, 2 busy)
+```
+
+**8. True Multi-threaded Concurrency**
+
+`wait()` and `start()` release the GIL while waiting for the NPU, allowing multiple Agent threads to truly execute concurrently and fully utilize the NPU's multi-tasking capabilities.
+
+**9. End-to-End AI Agent Development**
+
+From the first line of code to documentation writing, this project was entirely completed by an AI Agent (Claude), serving as a practical case study of the AI Native development model.
+
+---
+
+## Quick Start
+
+```python
 import numpy as np
+import pyCauchyKesai
 
 # Load model
-model = ck.CauchyKesai("/path/to/model", n_task=2)
+model = pyCauchyKesai.CauchyKesai("/opt/hobot/model/s100/basic/yolov8_640x640_nv12.hbm")
 
-# Print model summary
-model.summ()
+# Quickly view model info (Agent-friendly)
+print(model)
+# CauchyKesai(model='yolov8n_640x640_nv12', inputs=2, outputs=6, n_task=1)
 
-# Prepare inputs
-input_data = [np.random.rand(1, 3, 224, 224).astype(np.float32)]
+# View detailed summary
+model.s()
 
-# Run inference
-output = model(input_data)
+# View input/output names
+print("Inputs:", model.input_names)   # ['images_y', 'images_uv']
+print("Outputs:", model.output_names)  # ['output0', '318', '342', ...]
 
-# Async usage
-model.start(input_data, task_id=0)
-result = model.wait(task_id=0)
+# Performance test (dirty run)
+model.t()
+
+# Construct NV12 inputs (Y plane + UV plane)
+y  = np.random.randint(0, 255, (1, 640, 640, 1), dtype=np.uint8)
+uv = np.random.randint(0, 255, (1, 320, 320, 2), dtype=np.uint8)
+
+# Inference
+outputs = model([y, uv])
+print(f"output[0] shape: {outputs[0].shape}, dtype: {outputs[0].dtype}")
+# output[0] shape: (1, 80, 80, 80), dtype: float32
 ```
 
 ---
 
-## ✅ Summary of Recommended Usage
+## Installation
 
-| Method | Recommendation | Use Case |
-|--------|----------------|----------|
-| `.inference()` / `__call__()` | ✅ Recommended | One-time safe inference |
-| `.start()` + `.wait()` | ✅ Recommended | Asynchronous control |
-| `.summ()` | ✅ Recommended | View model structure |
-| `.t()` | ⚠️ For testing | Quick performance test |
+pyCauchyKesai is not published on PyPI; it must be compiled from source to generate a whl package for local installation.
+
+The whl package is **self-contained**: During the CMake build process, all HOBOT C runtime dynamic libraries (`libhbucp.so`, `libdnn.so`, etc.) are packaged into the `pyCauchyKesai/lib/` directory. Extension modules automatically locate these dependencies at runtime via `RPATH=$ORIGIN/lib`, eliminating the need to deploy any `.so` files separately in the system path after installation.
+
+The whl package is **strongly bound to the Python version** (reflected in the filename, e.g., `cp312` indicates CPython 3.12). A package compiled with a specific Python environment can only be installed into that same Python version.
+
+### Prerequisites
+
+- Linux aarch64 (Horizon RDK series development boards)
+- Python >= 3.10
+- CMake >= 3.18
+- C++17 compiler (gcc / g++)
+- Network access to PyPI (automatically downloads `scikit-build-core` and `pybind11` during build; used only for building, not installed in the user environment)
+
+### Building the whl Package
+
+**Step 1: Enter the source directory**
+
+```bash
+cd pyCauchyKesai/Nash
+```
+
+**Step 2: Activate the target Python environment**
+
+```bash
+# Example: Using a conda environment
+conda activate your_env
+
+# Verify interpreter path and version
+which python3
+python3 --version
+```
+
+**Step 3: Build the whl**
+
+```bash
+pip wheel .
+```
+
+During the build process, pip automatically installs `scikit-build-core` and `pybind11` in an isolated temporary environment, invokes CMake to compile the C++ extensions, packages all HOBOT dynamic libraries from `Nash/lib/` into the whl, and then cleans up the temporary environment without affecting the user environment.
+
+Upon completion, a whl file is generated in the current directory with the following filename format:
+
+```
+pycauchykesai-0.0.8-cp312-cp312-linux_aarch64.whl
+#                   ^^^^  ^^^^  ^^^^^^^^^^^^^
+#                   Python Version  Platform
+```
+
+**Step 4: Install**
+
+```bash
+pip install pycauchykesai-*.whl
+```
+
+### Verifying Installation
+
+```bash
+python3 -c "import pyCauchyKesai; print(pyCauchyKesai.__version__)"
+# 0.0.8
+```
+
+### Using the Same whl in Other Environments
+
+As long as the Python version in the target environment matches the version tag in the whl filename, you can directly copy and install the whl file without recompiling:
+
+```bash
+pip install pycauchykesai-0.0.8-cp312-cp312-linux_aarch64.whl
+```
+
+If the target environment has a different Python version (e.g., 3.10), switch to the corresponding environment and re-execute Steps 2 through 4 to generate a whl for that version.
 
 ---
 
-如果你需要将这份文档导出为 Markdown 文件、HTML 页面或集成到 Sphinx 文档系统中，我也可以帮你一键生成 😊
+## API Reference
+
+### Import
+
+```python
+import pyCauchyKesai
+from pyCauchyKesai import CauchyKesai
+
+# View module info
+print(pyCauchyKesai.__version__, pyCauchyKesai.__date__, pyCauchyKesai.__author__)
+print(pyCauchyKesai.__doc__)
+```
+
+---
+
+### `CauchyKesai(model_path, n_task=1, model_cnt_select=0)`
+
+Loads a BPU model and initializes the inference environment.
+
+| Parameter | Type | Default | Description |
+|------|------|--------|------|
+| `model_path` | `str` | — | Path to the `.hbm` model file |
+| `n_task` | `int` | `1` | Maximum number of concurrent tasks (1~32); each task is allocated independent input/output buffers |
+| `model_cnt_select` | `int` | `0` | Model index within a packed model; defaults to the 0th model |
+
+**About `n_task`:** During construction, `n_task` sets of complete input/output Tensor memory are pre-allocated. In multi-threaded or asynchronous scenarios, different threads use different `task_id`s to avoid memory contention and eliminate the overhead of dynamic malloc at runtime.
+
+**Automatic Parameter Correction:** If `n_task` or `model_cnt_select` exceeds the valid range, it is automatically clamped, and a warning is issued via Python's `warnings` module (Agents can capture this using `warnings.catch_warnings()`).
+
+```python
+model = pyCauchyKesai.CauchyKesai("/opt/hobot/model/s100/basic/yolov8_640x640_nv12.hbm")  # Single task
+model = pyCauchyKesai.CauchyKesai("/opt/hobot/model/s100/basic/yolov8_640x640_nv12.hbm", n_task=4)  # 4-way concurrency
+model = pyCauchyKesai.CauchyKesai("packed.hbm", model_cnt_select=1)  # Select the 1st model in packed
+
+# Agent captures warnings
+import warnings
+with warnings.catch_warnings(record=True) as w:
+    warnings.simplefilter("always")
+    model = pyCauchyKesai.CauchyKesai(path, n_task=99)
+    if w:
+        print(w[0].message)  # n_task > 32, clamped to 32
+```
+
+---
+
+### `.s()` — Model Summary
+
+Returns a `ModelSummary` object (a `dict` subclass): outputs formatted text directly in the terminal, while allowing Agents to access data structurally.
+
+```python
+# Human usage: Directly print formatted output
+model.s()
+
+# Agent usage: Structural access
+info = model.s()
+info['model_path']            # str
+info['n_task']                # int
+info['memory_mb']             # float
+info['inputs'][0]['name']     # str, e.g., 'images_y'
+info['inputs'][0]['shape']    # list, e.g., [1, 640, 640, 1]
+info['inputs'][0]['dtype']    # str, e.g., 'uint8'
+info['outputs'][0]['name']    # str
+info['outputs'][0]['shape']   # list
+info['outputs'][0]['dtype']   # str
+```
+
+---
+
+### `.t()` — Performance Test
+
+Performs a single dirty inference run using random data and returns a `BenchmarkResult` object (a `dict` subclass): outputs formatted text directly in the terminal, while allowing Agents to read numerical values for decision-making.
+
+```python
+# Human usage: Directly print formatted output
+model.t()
+
+# Agent usage: Read numerical values
+bench = model.t()
+bench['time_us']   # float, microseconds
+bench['time_ms']   # float, milliseconds
+bench['time_s']    # float, seconds
+bench['time_min']  # float, minutes
+```
+
+---
+
+### `.inference(inputs, task_id=0, priority=0)` — Synchronous Inference
+
+A complete inference cycle: parameter validation → task submission → waiting for results. Suitable for single-call scenarios.
+
+The underlying implementation releases the GIL while waiting for the BPU to complete, so calling `.inference()` in a multi-threaded environment does not cause mutual blocking.
+
+If validation fails, an exception is raised (`IndexError` / `ValueError` / `RuntimeError`) instead of silently returning an empty list.
+
+```python
+outputs: List[np.ndarray] = model.inference([input1, input2], task_id=0, priority=0)
+
+# Agent-friendly usage: Capture exceptions to parse error messages and auto-correct
+try:
+    outputs = model([input1, input2])
+except ValueError as e:
+    print(e)  # shape mismatch at input[0] 'images_y': expected (1, 640, 640, 1), got (1, 480, 640, 1)
+```
+
+### `model(inputs, task_id=0, priority=0)` — Direct Call (Equivalent to `.inference()`)
+
+```python
+outputs = model([input1, input2])
+```
+
+---
+
+### `.is_busy(task_id=0)` — Query Task Status
+
+Returns whether the specified task slot is currently running an inference. Agents can use this for multi-task scheduling to select free slots.
+
+```python
+# Query a single task
+if not model.is_busy(0):
+    model.start(inputs, task_id=0)
+
+# Agent multi-task scheduling: Find the first free slot
+free_slot = next((i for i in range(model.s()['n_task']) if not model.is_busy(i)), None)
+if free_slot is not None:
+    model.start(inputs, task_id=free_slot)
+```
+
+**Exception:** Raises `IndexError` if `task_id` is out of range.
+
+---
+
+### `.start(inputs, task_id=0, priority=0)` — Asynchronous Submission
+
+Submits an inference task to the BPU scheduler and returns immediately without waiting for results. The GIL is released during submission.
+
+**Zero-Copy Mode:** If `inputs` is an empty list `[]`, the data copying step is skipped, and data already written in `input_tensors` is used directly. Suitable for scenarios where users have pre-written data to ION memory via `np.copyto()`.
+
+```python
+# Regular mode: Pass data
+model.start([input1, input2], task_id=0, priority=128)
+
+# Zero-copy mode: Pass empty list (data must be pre-written via input_tensors)
+np.copyto(model.input_tensors[0][0], my_data)
+model.start([], task_id=0)
+```
+
+---
+
+### `.wait(task_id=0)` — Wait for Results
+
+Blocks until the specified task completes and returns a list of output tensors (zero-copy, pointing directly to BPU output buffers).
+
+The GIL is released during the wait period (`hbUCPWaitTaskDone`), allowing other Python threads to be scheduled normally.
+
+```python
+outputs: List[np.ndarray] = model.wait(task_id=0)
+```
+
+---
+
+### `.input_tensors` — Input ION Memory View
+
+Type: `list[list[np.ndarray]]`, Shape: `[n_task][input_count]`
+
+NumPy views of input ION memory pre-allocated during construction. These are **zero-copy** and point directly to physical memory accessible by the BPU. They can be used to bypass the internal `memcpy` of `inference()`, allowing users to manually write data to ION memory before invoking inference.
+
+```python
+# View input buffer info
+buf = model.input_tensors[0][0]
+print(buf.shape, buf.dtype)   # e.g. (1, 640, 640, 1) uint8
+
+# Directly write to ION memory (zero-copy)
+# Note: np.copyto() is a numpy-level operation; my_data must be a C-contiguous array
+# If transposed/permuted, use np.ascontiguousarray() first, or use inference()/start() for automatic handling
+np.copyto(model.input_tensors[task_id][i], my_data)
+```
+
+---
+
+### `.output_tensors` — Output ION Memory View
+
+Type: `list[list[np.ndarray]]`, Shape: `[n_task][output_count]`
+
+NumPy views of output ION memory pre-allocated during construction. These are **zero-copy** and point directly to the physical memory where the BPU writes results. The arrays returned by `wait()` point to the same memory block as this view.
+
+```python
+# Read directly after wait() completes; no extra copy needed
+result = model.output_tensors[task_id][0]
+print(result.shape, result.dtype)
+```
+
+---
+
+### `.input_names` / `.output_names` — Tensor Names
+
+Type: `list[str]`
+
+Lists of model input/output tensor names. The order corresponds to the second dimension of `input_tensors` / `output_tensors`.
+
+```python
+print(model.input_names)   # ['images_y', 'images_uv']
+print(model.output_names)  # ['output0', '318', ...]
+```
+
+---
+
+### Parameter Descriptions
+
+| Parameter | Type | Range | Description |
+|------|------|------|------|
+| `inputs` | `List[np.ndarray]` | — | List of input tensors; order and type must match the model |
+| `task_id` | `int` | `[0, n_task-1]` | Task slot ID; use different IDs to distinguish concurrent tasks |
+| `priority` | `int` | `[0, 255]` | BPU scheduling priority; 255 is highest, 0 is lowest |
+
+---
+
+## Usage Examples
+
+### Single Inference
+
+```python
+import pyCauchyKesai
+import numpy as np
+
+model = pyCauchyKesai.CauchyKesai("/opt/hobot/model/s100/basic/yolov8_640x640_nv12.hbm")
+
+# View model info
+print("Inputs:", model.input_names)   # ['images_y', 'images_uv']
+print("Outputs:", model.output_names)  # ['output0', '318', '342', ...]
+
+# Construct NV12 inputs
+y  = np.random.randint(0, 255, (1, 640, 640, 1), dtype=np.uint8)
+uv = np.random.randint(0, 255, (1, 320, 320, 2), dtype=np.uint8)
+
+# Inference
+outputs = model([y, uv])
+print(outputs[0].shape)  # (1, 80, 80, 80)
+```
+
+### Zero-Copy Inference (Advanced Usage)
+
+Use `input_tensors` and `output_tensors` to directly manipulate ION memory, avoiding the internal `memcpy` of `inference()`. Suitable for scenarios with extremely high performance requirements.
+
+```python
+import pyCauchyKesai
+import numpy as np
+
+model = pyCauchyKesai.CauchyKesai("/opt/hobot/model/s100/basic/yolov8_640x640_nv12.hbm", n_task=1)
+
+task_id = 0
+
+# Prepare data
+y  = np.random.randint(0, 255, (1, 640, 640, 1), dtype=np.uint8)
+uv = np.random.randint(0, 255, (1, 320, 320, 2), dtype=np.uint8)
+
+# Zero-copy write to ION memory
+# Note: np.copyto() is a numpy-level operation requiring the source array to be C-contiguous
+# If data has undergone transpose/permute operations, call np.ascontiguousarray() first
+np.copyto(model.input_tensors[task_id][0], y)
+np.copyto(model.input_tensors[task_id][1], uv)
+
+# Submit inference (pass empty list since data is already in ION memory)
+model.start([], task_id=task_id)
+
+# Wait for completion
+model.wait(task_id=task_id)
+
+# Zero-copy read results (direct access to ION memory)
+result = model.output_tensors[task_id][0]
+print(result.shape, result.dtype)  # (1, 80, 80, 80) float32
+```
+
+**Notes:**
+- When using `np.copyto()` to write directly to ION memory, the source array must be **C-contiguous**; otherwise, data corruption may occur.
+- If arrays have undergone `transpose()`, `permute()`, or similar operations, call `np.ascontiguousarray()` first.
+- If you prefer not to handle continuity manually, use the `inference()` or `start()` methods instead; they automatically handle non-contiguous arrays (internally using `py::array::ensure()` to convert automatically, creating a copy only when necessary).
+
+### Multi-Way Concurrent Inference (Multi-threading)
+
+`wait()` releases the GIL while waiting for the BPU, allowing multiple threads to truly run concurrently without blocking each other. Each thread uses an independent `task_id` corresponding to independently pre-allocated buffers constructed at initialization, ensuring no memory contention.
+
+```python
+import threading
+import pyCauchyKesai
+import numpy as np
+
+model = pyCauchyKesai.CauchyKesai("/opt/hobot/model/s100/basic/yolov8_640x640_nv12.hbm", n_task=4)
+
+def run(task_id):
+    y  = np.random.randint(0, 255, (1, 640, 640, 1), dtype=np.uint8)
+    uv = np.random.randint(0, 255, (1, 320, 320, 2), dtype=np.uint8)
+    # inference() is equivalent to start() + wait(); GIL is released during the wait
+    result = model.inference([y, uv], task_id=task_id)
+    print(f"task {task_id}: {result[0].shape}")
+
+threads = [threading.Thread(target=run, args=(i,)) for i in range(4)]
+for t in threads: t.start()
+for t in threads: t.join()
+```
+
+### Asynchronous Pipeline
+
+```python
+import pyCauchyKesai
+import numpy as np
+
+model = pyCauchyKesai.CauchyKesai("/opt/hobot/model/s100/basic/yolov8_640x640_nv12.hbm", n_task=2)
+
+y_a  = np.random.randint(0, 255, (1, 640, 640, 1), dtype=np.uint8)
+uv_a = np.random.randint(0, 255, (1, 320, 320, 2), dtype=np.uint8)
+y_b  = np.random.randint(0, 255, (1, 640, 640, 1), dtype=np.uint8)
+uv_b = np.random.randint(0, 255, (1, 320, 320, 2), dtype=np.uint8)
+
+# Submit task 0
+model.start([y_a, uv_a], task_id=0)
+
+# Submit task 1 (without waiting for task 0 to complete)
+model.start([y_b, uv_b], task_id=1)
+
+# Retrieve results as needed
+result_a = model.wait(task_id=0)
+result_b = model.wait(task_id=1)
+```
+
+---
+
+## Input Validation
+
+Calling `.inference()` automatically performs the following validations. If checks fail, exceptions with detailed descriptions are raised (no longer silently returning empty lists):
+
+| Check Item | Exception Type | Example Error Message |
+|--------|----------|-------------|
+| `task_id` range | `IndexError` | `task_id out of range: got 5, valid range [0, 3]` |
+| `priority` range | `IndexError` | `priority out of range: got 300, valid range [0, 255]` |
+| Input count | `ValueError` | `input count mismatch: expected 2, got 1` |
+| Data type | `ValueError` | `dtype mismatch at input[0] 'images_y': expected uint8, got float32` |
+| Number of dimensions | `ValueError` | `ndim mismatch at input[0] 'images_y': expected 4, got 2` |
+| Shape | `ValueError` | `shape mismatch at input[0] 'images_y': expected (1, 640, 640, 1), got (1, 480, 640, 1)` |
+| Task status | `RuntimeError` | `task_id 0 is already in use` |
+
+> **Regarding Memory Continuity:** `inference()` / `start()` internally handle non-C-contiguous arrays automatically. If the passed array is already C-contiguous (e.g., directly created), no extra copy occurs. If it is non-contiguous (e.g., `transpose()`, `[::2]` slice, Fortran order), a C-contiguous copy is automatically created before copying to ION memory. Throughout this process, there is always only one transfer from CPU memory to ION memory; users do not need to manually call `np.ascontiguousarray()`.
+
+---
+
+## Supported Data Types
+
+| NumPy dtype | BPU Type | Bit Width |
+|-------------|----------|------|
+| `uint8` | U8 | 8-bit |
+| `int8` | S8 | 8-bit |
+| `uint16` | U16 | 16-bit |
+| `int16` | S16 | 16-bit |
+| `float16` | F16 | 16-bit |
+| `uint32` | U32 | 32-bit |
+| `int32` | S32 | 32-bit |
+| `float32` | F32 | 32-bit |
+| `uint64` | U64 | 64-bit |
+| `int64` | S64 | 64-bit |
+| `float64` | F64 | 64-bit |
+| `bool` | BOOL8 | 8-bit |
+
+---
+
+## Combine Compilation Configuration Reference
+
+### FeatureMap Input (Recommended, behavior fully consistent with ONNX)
+
+Use `featuremap` type for all inputs. Model pre/post-processing behavior remains consistent with ONNX, with no implicit preprocessing.
+
+```yaml
+model_parameters:
+  onnx_model: 'your_model.onnx'
+  march: "nash-e"
+  working_dir: 'bpu_model_output'
+  output_model_file_prefix: 'BPU_model'
+
+input_parameters:
+  input_name: "input1;input2;input3;"
+  input_type_rt: 'featuremap;featuremap;featuremap;'
+  input_layout_rt: 'NCHW;NCHW;NCHW;'
+  input_type_train: 'featuremap;featuremap;featuremap;'
+  input_layout_train: 'NCHW;NCHW;NCHW;'
+  norm_type: 'no_preprocess;no_preprocess;no_preprocess;'
+
+calibration_parameters:
+  cal_data_dir: 'cal_data1;cal_data2;cal_data3;'
+  cal_data_type: 'float32;float32;float32;'
+  calibration_type: 'default'
+  optimization: set_all_nodes_int16
+
+compiler_parameters:
+  extra_params: {'input_no_padding': True, 'output_no_padding': True}
+  jobs: 16
+  compile_mode: 'latency'
+  optimize_level: 'O2'
+```
+
+---
+
+## Frequently Asked Questions
+
+**Q: Passing `torch.Tensor` raises `TypeError`**
+
+```
+TypeError: __call__(): incompatible function arguments.
+```
+
+pybind11 performs type checking before entering C++ and only accepts `numpy.ndarray`. Convert first:
+
+```python
+outputs = model([tensor.numpy()])
+# or
+outputs = model([tensor.cpu().detach().numpy()])
+```
+
+---
+
+**Q: `ImportError: version 'GLIBCXX_3.4.30' not found`**
+
+The `libstdc++` version in the conda environment is lower than required by the system HOBOT libraries. Upgrade it:
+
+```bash
+conda install libstdcxx-ng -c conda-forge
+```
+
+---
+
+**Q: How to use in a non-default Python environment**
+
+Find the library path of the target Python interpreter and copy the `.so` file there:
+
+```bash
+python3 -c "import os; print(os.path.dirname(os.__file__))"
+# /root/miniconda3/envs/myenv/lib/python3.10
+cp pyCauchyKesai*.so /root/miniconda3/envs/myenv/lib/python3.10/
+```
+
+---
+
+**Q: What happens if a non-C-contiguous array (e.g., transposed or sliced) is passed?**
+
+`inference()` / `start()` internally handle non-contiguous arrays automatically; there is no need to manually call `np.ascontiguousarray()`. The C++ layer uses `py::array::ensure()` to check continuity: if already C-contiguous, the original array is used directly (zero extra overhead); otherwise, a C-contiguous copy is automatically created. Throughout this process, there is always only one transfer from CPU memory to ION memory.
+
+```python
+# The following写法 are all correct; no manual conversion needed
+x = data.transpose(0, 2, 3, 1)
+outputs = model([x])  # Automatically handled; data is correct
+
+x = data[::2]         # Slice (non-contiguous)
+outputs = model([x])  # Also automatically handled
+```
+
+**Note:** When using the zero-copy method (`np.copyto` to write directly to `input_tensors`), `np.copyto` is a pure numpy operation that does not pass through the C++ layer. In this case, you must still ensure the source array is C-contiguous:
+
+```python
+# Manually ensure C-contiguity before zero-copy write
+x = np.ascontiguousarray(data.transpose(0, 2, 3, 1))
+np.copyto(model.input_tensors[task_id][0], x)
+```
+
+---
+
+## Disclaimer
+
+All source code is open-source. Please ensure you have sufficient understanding of the program before use. This interface is provided for personal debugging by community developers and does not fully guarantee functional correctness. If you find issues, please feel free to submit an issue or PR.
+
+---
+
+
+## Appendix 1: Updating OpenExplore Header Files and Dynamic Libraries
+
+When recompiling pyCauchyKesai, if you need to align with an updated version of the OpenExplore SDK, you must first replace the header files and dynamic libraries under `Nash/include/` and `Nash/lib/`, then re-execute `pip wheel .`.
+
+Obtain the following files from the OpenExplore package:
+
+```
+samples/ucp_tutorial/deps_aarch64/ucp/
+├── include/hobot/   ← Header files
+└── lib/             ← Dynamic libraries
+```
+
+**Update Nash/include/:**
+
+```bash
+rm -rf pyCauchyKesai/Nash/include/hobot
+cp -r /path/to/ucp/include/hobot pyCauchyKesai/Nash/include/
+```
+
+**Update Nash/lib/:**
+
+```bash
+rm pyCauchyKesai/Nash/lib/*.so
+cp /path/to/ucp/lib/*.so pyCauchyKesai/Nash/lib/
+```
+
+**Check Dynamic Library Version:**
+
+```bash
+strings pyCauchyKesai/Nash/lib/libhbucp.so | grep SO_VERSION
+# SO_VERSION = (3U).(7U).(4U)
+```
+
+**Check Header File Version:**
+
+```bash
+file="pyCauchyKesai/Nash/include/hobot/hb_ucp.h"
+eval $(grep -e 'HB_UCP_VERSION_MAJOR' -e 'HB_UCP_VERSION_MINOR' -e 'HB_UCP_VERSION_PATCH' $file | \
+      sed -E 's/#define HB_UCP_VERSION_(MAJOR|MINOR|PATCH)[^0-9]*([0-9]+).*/VERSION_\1=\2/')
+echo "$file Version: $VERSION_MAJOR.$VERSION_MINOR.$VERSION_PATCH"
+```
+
+
+## Appendix 2: Analysis of pybind11 GIL and hbUCPWaitTaskDone Blocking Issues
+
+> Subject of study: `libhbucp.so`, version `SO_VERSION = (3U).(12U).(3U)`
+
+### Problem Phenomenon
+
+In Python multi-threading, when multiple threads each hold a `task_id` and concurrently call `inference()` or `wait()`, execution effectively becomes serial, preventing true concurrency.
+
+### Root Cause
+
+**C++ functions bound by pybind11 hold the GIL (Global Interpreter Lock) by default during execution.** The GIL is only released if `py::gil_scoped_release` is explicitly used. The original code's `wait()` did not release the GIL, leading to:
+
+```
+Thread A: Calls wait() → Holds GIL → Enters hbUCPWaitTaskDone → Blocks in kernel waiting
+                                                              ↑
+                                         GIL held by Thread A and not released; Thread B can never be scheduled
+```
+
+This is not a Python scheduler issue; rather, Thread A holds the GIL while blocking itself, neither computing nor yielding the lock.
+
+### Evidence 1: libhbucp.so Contains No Python Symbols
+
+```bash
+nm -D libhbucp.so | grep -E "PyEval|Py_BEGIN|PyGILState|python"
+# No output
+```
+
+`libhbucp.so` is a pure C/C++ library, completely unaware of the Python GIL, and cannot release it on its own.
+
+### Evidence 2: hbUCPWaitTaskDone Uses Blocking Primitives Internally
+
+Inspecting `nm -D libhbucp.so` reveals the library depends on the following system symbols:
+
+```
+U pthread_cond_clockwait@GLIBC_2.34   ← Condition variable wait; blocks thread until signal arrives
+U pthread_mutex_lock@GLIBC_2.17       ← Mutex lock
+U nanosleep@GLIBC_2.17                ← Sleep wait
+U poll@GLIBC_2.17                     ← I/O polling wait
+```
+
+### Evidence 3: Disassembly Confirms Call Path
+
+Disassembling `hbUCPWaitTaskDone` (located at offset `0x3aae0` in the `.so`) directly reveals the call sequence within the function body:
+
+```asm
+3ab20:  bl  pthread_mutex_lock      ← Lock acquired before entering wait
+...
+3ab30:  bl  pthread_mutex_unlock    ← Unlock after checking status
+...
+3ab64:  blr x2                      ← Call virtual function Wait (internally uses pthread_cond_clockwait)
+```
+
+This is a standard "Lock → Condition Variable Wait → Unlock" pattern. Throughout this process, the thread blocks in kernel state for a duration equal to the BPU inference time.
+
+### Solution
+
+Wrap the `hbUCPWaitTaskDone` call in `wait()` and the `hbUCPSubmitTask` call in `start()` with `py::gil_scoped_release`:
+
+```cpp
+// In wait()
+{
+    py::gil_scoped_release release;
+    RDK_CHECK_SUCCESS(hbUCPWaitTaskDone(task_handles[task_id], 0),
+                      "hbUCPWaitTaskDone failed");
+}
+
+// In start()
+{
+    py::gil_scoped_release release;
+    RDK_CHECK_SUCCESS(hbUCPSubmitTask(task_handle, &ctrl_param),
+                      "hbUCPSubmitTask failed");
+}
+```
+
+Note: The `memcpy` phase (copying numpy data into BPU buffers) must still hold the GIL, as it involves accessing the Python object `inputs[i].data()`.
+
+### Concurrent Behavior After Fix
+
+```
+Thread A: start() → [Release GIL] → BPU running...          → wait()[Release GIL] → Wait for completion → Return result
+Thread B:               start() → [Release GIL] → BPU running... → wait()[Release GIL] → Wait for completion → Return result
+Thread C:                             start() → [Release GIL] → BPU running...
+```
+
+BPU inference across multiple threads truly overlaps execution; the GIL is held only briefly during memcpy and return value construction.
+
+---
