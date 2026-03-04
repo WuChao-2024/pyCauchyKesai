@@ -2,13 +2,15 @@
 
 # pyCauchyKesai
 
-pyCauchyKesai 是面向地平线（Horizon Robotics）BPU 平台的 Python 推理接口库，基于 pybind11 封装 C++ 实现，让 Python 开发者能够在 Nash-e / Nash-m 等边缘 AI 芯片上高效加载和运行 `.hbm` 神经网络模型。
+pyCauchyKesai 是面向地平线（Horizon Robotics）BPU 平台的 AI Native 推理层，基于 pybind11 封装 C++ 实现，让 Python 开发者能够在 Nash-e / Nash-m 等边缘 AI 芯片上高效加载和运行 `.hbm` 神经网络模型。
 
 - 版本：`0.0.9`
 - 平台：Linux aarch64（地平线 RDK 系列开发板）
 - Python：>= 3.10
 - 许可证：GNU AGPL v3
 
+BPU相关内容请关注地平线开发者社区释放的[开放材料](https://oe.horizon.auto/)
+ 
 ---
 
 ## AI Native 设计理念

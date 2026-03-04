@@ -4,7 +4,7 @@
 
 pyCauchyKesai is a Python inference interface library designed for the Horizon Robotics BPU platform. Built on C++ implementations wrapped via pybind11, it enables Python developers to efficiently load and run `.hbm` neural network models on edge AI chips such as Nash-e and Nash-m.
 
-- Version: `0.0.8`
+- Version: `0.0.9`
 - Platform: Linux aarch64 (Horizon RDK series development boards)
 - Python: >= 3.10
 - License: GNU AGPL v3
