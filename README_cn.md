@@ -824,7 +824,7 @@ U poll@GLIBC_2.17                     ← I/O 轮询等待
 }
 ```
 
-注意：`memcpy`（将 numpy 数据拷入 BPU 缓冲区）阶段仍须持有 GIL，因为此时在访问 Python 对象 `inputs[i].data()`。
+注意：`memcpy`（将 numpy 数据拷入 BPU 缓冲区）阶段仍须持有 GIL， 因为此时在访问 Python 对象 `inputs[i].data()`。
 
 ### 修复后的并发行为
 
