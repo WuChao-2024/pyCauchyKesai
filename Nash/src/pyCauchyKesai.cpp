@@ -105,9 +105,8 @@ CauchyKesai::CauchyKesai(const std::string &model_path, int32_t n_task = 1, int3
     n_task_ = n_task;
     inputs_hbTensor.resize(n_task_);
     outputs_hbTensor.resize(n_task_);
-    // results.resize(n_task_);
     task_handles.resize(n_task_);
-    is_infer.resize(n_task_);
+    is_infer = std::vector<std::atomic<int>>(n_task_);
 
     // 检查 model_path 是否存在且是文件
     if (!checkFileExists(model_path))
@@ -155,7 +154,6 @@ CauchyKesai::CauchyKesai(const std::string &model_path, int32_t n_task = 1, int3
         "hbDNNGetModelHandle failed");
 
     // 输入信息
-    // std::cout << " 输入信息 ..." << std::endl;
     mbs = 0;
     input_count = 0;
     RDK_CHECK_SUCCESS(
@@ -192,7 +190,6 @@ CauchyKesai::CauchyKesai(const std::string &model_path, int32_t n_task = 1, int3
         for (int32_t t = 0; t < n_task_; t++)
         {
             hbDNNGetInputTensorProperties(&inputs_hbTensor[t][i].properties, dnn_handle, i);
-            // std::cout << "[CauchyKesai][I][input] t=" << t << ", i=" <<i << ", size=" << inputs_hbTensor[t][i].properties.alignedByteSize <<std::endl;
             if (inputs_hbTensor[t][i].properties.alignedByteSize < 0)
             {
                 for (int32_t dim_i = inputs_hbTensor[t][i].properties.validShape.numDimensions - 1; dim_i >= 0; --dim_i)
@@ -216,7 +213,6 @@ CauchyKesai::CauchyKesai(const std::string &model_path, int32_t n_task = 1, int3
         inputs_byteSize[i] = inputs_hbTensor[0][i].properties.alignedByteSize;
     }
     // 输出信息
-    // std::cout << " 输出信息 ..." << std::endl;
     output_count = 0;
     RDK_CHECK_SUCCESS(
         hbDNNGetOutputCount(&output_count, dnn_handle),
@@ -253,7 +249,6 @@ CauchyKesai::CauchyKesai(const std::string &model_path, int32_t n_task = 1, int3
         for (int32_t t = 0; t < n_task_; t++)
         {
             hbDNNGetOutputTensorProperties(&outputs_hbTensor[t][i].properties, dnn_handle, i);
-            // std::cout << "[CauchyKesai][I][output] t=" << t << ", i=" <<i << ", size=" << outputs_hbTensor[t][i].properties.alignedByteSize <<std::endl;
             RDK_CHECK_SUCCESS(
                 hbUCPMallocCached(&outputs_hbTensor[t][i].sysMem, outputs_hbTensor[t][i].properties.alignedByteSize, 0),
                 "hbUCPMallocCached failed");
@@ -261,12 +256,10 @@ CauchyKesai::CauchyKesai(const std::string &model_path, int32_t n_task = 1, int3
         }
     }
 
-    // 异步推理标志
-    // std::cout << "异步推理标志" << std::endl;
+    // 异步推理标志初始化（std::atomic 已在构造时初始化为 0）
     for (int32_t t = 0; t < n_task_; t++)
     {
-        // std::cout << "t: " <<t << std::endl;
-        is_infer[t] = 0;
+        is_infer[t].store(0, std::memory_order_relaxed);
     }
 
     // 构建 ION 内存的 numpy 视图（零拷贝）
@@ -300,7 +293,6 @@ CauchyKesai::CauchyKesai(const std::string &model_path, int32_t n_task = 1, int3
 CauchyKesai::~CauchyKesai()
 {
     std::cout << "[INFO] release model " << "\033[1;31m" << name_list[model_cnt_select_] << "\033[0m";
-    // summ();
     for (int32_t t = 0; t < n_task_; t++)
     {
         for (int32_t i = 0; i < input_count; i++)
@@ -321,7 +313,7 @@ bool CauchyKesai::is_busy(int32_t task_id) const
             "task_id out of range: got " + std::to_string(task_id) +
             ", valid range [0, " + std::to_string(n_task_ - 1) + "]");
     }
-    return is_infer[task_id] != 0;
+    return is_infer[task_id].load(std::memory_order_acquire) != 0;
 }
 
 py::dict CauchyKesai::s()
@@ -383,8 +375,7 @@ py::dict CauchyKesai::t()
     // 开始计时
     auto tp_start = std::chrono::system_clock::now();
 
-    // 推理标志
-    is_infer[task_id] = 1;
+    is_infer[task_id].store(1, std::memory_order_release);
 
     // BPU推理任务
     hbUCPTaskHandle_t task_handle{nullptr};
@@ -396,8 +387,6 @@ py::dict CauchyKesai::t()
 
     HB_UCP_INITIALIZE_SCHED_PARAM(&ctrl_param);
     ctrl_param.priority = HB_UCP_PRIORITY_LOWEST;
-    // ctrl_param.deviceId = 0;
-    // ctrl_param.customId = 0;
     ctrl_param.backend = HB_UCP_BPU_CORE_ANY;
     RDK_CHECK_SUCCESS(hbUCPSubmitTask(task_handle, &ctrl_param),
                       "hbUCPSubmitTask failed");
@@ -418,8 +407,7 @@ py::dict CauchyKesai::t()
     RDK_CHECK_SUCCESS(hbUCPReleaseTask(task_handles[task_id]),
                       "hbUCPReleaseTask failed");
 
-    // 推理标志
-    is_infer[task_id] = 0;
+    is_infer[task_id].store(0, std::memory_order_release);
 
     // 停止计时
     auto tp_end = std::chrono::system_clock::now();
@@ -441,8 +429,7 @@ py::dict CauchyKesai::t()
 
 void CauchyKesai::start(const std::vector<py::array> &inputs, int32_t task_id, int32_t priority)
 {
-    // 推理标志
-    is_infer[task_id] = 1;
+    is_infer[task_id].store(1, std::memory_order_release);
 
     // 将array的数据拷贝进输入Tensor, 并刷新带Cache的内存
     // 如果 inputs 为空，说明用户已通过 input_tensors 零拷贝写入，跳过拷贝只刷 cache
@@ -503,7 +490,7 @@ std::vector<py::array> CauchyKesai::wait(int32_t task_id)
                       "hbUCPReleaseTask failed");
 
     // 推理标志
-    is_infer[task_id] = 0;
+    is_infer[task_id].store(0, std::memory_order_release);
 
     // 返回推理结果
     std::vector<py::array> rs;
@@ -514,7 +501,6 @@ std::vector<py::array> CauchyKesai::wait(int32_t task_id)
     }
 
     return rs;
-    // return results[task_id];
 }
 
 std::vector<py::array> CauchyKesai::inference(const std::vector<py::array> &inputs, int32_t task_id, int32_t priority)
@@ -585,7 +571,7 @@ std::vector<py::array> CauchyKesai::inference(const std::vector<py::array> &inpu
     }
 
     // task 占用检查
-    if (is_infer[task_id])
+    if (is_infer[task_id].load(std::memory_order_acquire))
     {
         throw std::runtime_error(
             "task_id " + std::to_string(task_id) + " is already in use");
@@ -594,195 +580,3 @@ std::vector<py::array> CauchyKesai::inference(const std::vector<py::array> &inpu
     start(inputs, task_id, priority);
     return wait(task_id);
 }
-
-// void CauchyKesai::start(const std::vector<py::array_t<float>> &inputs, int task_id)
-// {
-//     return;
-// }
-// std::vector<py::array_t<float>> CauchyKesai::wait(int task_id)
-// {
-//     return std::vector<py::array_t<float>>();
-// }
-
-// py::array_t<float> CauchyKesai::start(py::array_t<float> state, py::array_t<float> laptop, py::array_t<float> phone)
-// {
-//     // np check
-//     py::buffer_info state_buf_info = state.request();
-//     if (state_buf_info.ndim != transformerLayers_input[0].properties.validShape.numDimensions ||
-//         state_buf_info.shape[0] != transformerLayers_input[0].properties.validShape.dimensionSize[0] ||
-//         state_buf_info.shape[1] != transformerLayers_input[0].properties.validShape.dimensionSize[1])
-//     {
-//         std::stringstream ss;
-//         ss << "wrong input numpy array state. need: (";
-//         for (int32_t i = 0; i < transformerLayers_input[0].properties.validShape.numDimensions; i++)
-//         {
-//             ss << transformerLayers_input[0].properties.validShape.dimensionSize[i] << ", ";
-//         }
-//         ss << "), got: (";
-//         for (int32_t i = 0; i < state_buf_info.ndim; i++)
-//         {
-//             ss << state_buf_info.shape[i] << ", ";
-//         }
-//         ss << ")";
-//         throw std::runtime_error(ss.str());
-//     }
-
-//     if (state_buf_info.format != py::format_descriptor<float>::format())
-//         throw std::runtime_error("Input numpy array state must have dtype float32.");
-
-//     py::buffer_info laptop_buf_info = laptop.request();
-//     if (laptop_buf_info.ndim != laptop_input[0].properties.validShape.numDimensions ||
-//         laptop_buf_info.shape[0] != laptop_input[0].properties.validShape.dimensionSize[0] ||
-//         laptop_buf_info.shape[1] != laptop_input[0].properties.validShape.dimensionSize[1] ||
-//         laptop_buf_info.shape[2] != laptop_input[0].properties.validShape.dimensionSize[2] ||
-//         laptop_buf_info.shape[3] != laptop_input[0].properties.validShape.dimensionSize[3])
-//     {
-//         std::stringstream ss;
-//         ss << "wrong input numpy array laptop. need: (";
-//         for (int32_t i = 0; i < laptop_input[0].properties.validShape.numDimensions; i++)
-//         {
-//             ss << laptop_input[0].properties.validShape.dimensionSize[i] << ", ";
-//         }
-//         ss << "), got: (";
-//         for (int32_t i = 0; i < laptop_buf_info.ndim; i++)
-//         {
-//             ss << laptop_buf_info.shape[i] << ", ";
-//         }
-//         ss << ")";
-//         throw std::runtime_error(ss.str());
-//     }
-
-//     if (laptop_buf_info.format != py::format_descriptor<float>::format())
-//         throw std::runtime_error("Input numpy array laptop must have dtype float32.");
-
-//     py::buffer_info phone_buf_info = phone.request();
-//     if (phone_buf_info.ndim != phone_input[0].properties.validShape.numDimensions ||
-//         phone_buf_info.shape[0] != phone_input[0].properties.validShape.dimensionSize[0] ||
-//         phone_buf_info.shape[1] != phone_input[0].properties.validShape.dimensionSize[1] ||
-//         phone_buf_info.shape[2] != phone_input[0].properties.validShape.dimensionSize[2] ||
-//         phone_buf_info.shape[3] != phone_input[0].properties.validShape.dimensionSize[3])
-//     {
-//         std::stringstream ss;
-//         ss << "wrong input numpy array phone. need: (";
-//         for (int32_t i = 0; i < phone_input[0].properties.validShape.numDimensions; i++)
-//         {
-//             ss << phone_input[0].properties.validShape.dimensionSize[i] << ", ";
-//         }
-//         ss << "), got: (";
-//         for (int32_t i = 0; i < laptop_buf_info.ndim; i++)
-//         {
-//             ss << phone_buf_info.shape[i] << ", ";
-//         }
-//         ss << ")";
-//         throw std::runtime_error(ss.str());
-//     }
-
-//     if (phone_buf_info.format != py::format_descriptor<float>::format())
-//         throw std::runtime_error("Input numpy array phone must have dtype float32.");
-
-//     // 启动 laptop 的 VisonEncoder 特征推理
-//     float *laptop_np_ptr = reinterpret_cast<float *>(laptop_buf_info.ptr);
-//     float *laptop_hbTensor_ptr = reinterpret_cast<float *>(laptop_input[0].sysMem.virAddr);
-//     std::memcpy(laptop_hbTensor_ptr, laptop_np_ptr, laptop_buf_info.size * sizeof(float));
-
-//     for (int i = 0; i < output_count; i++)
-//     {
-//         hbUCPMemFlush(&laptop_input[i].sysMem, HB_SYS_MEM_CACHE_INVALIDATE);
-//     }
-
-//     hbUCPTaskHandle_t laptop_task_handle{nullptr};
-
-//     RDK_CHECK_SUCCESS(
-//         hbDNNInferV2(&laptop_task_handle, laptop_output.data(), laptop_input.data(), dnn_handle),
-//         "BPU ACT Policy Vision Encoder laptop_task hbDNNInferV2 failed");
-//     hbUCPSchedParam laptop_ctrl_param;
-
-//     HB_UCP_INITIALIZE_SCHED_PARAM(&laptop_ctrl_param);
-//     laptop_ctrl_param.backend = HB_UCP_BPU_CORE_ANY;
-//     RDK_CHECK_SUCCESS(hbUCPSubmitTask(laptop_task_handle, &laptop_ctrl_param),
-//                       "BPU ACT Policy Vision Encoder laptop_task hbUCPSubmitTask failed");
-
-//     // 启动 phone 的 VisonEncoder 特征推理
-//     float *phone_np_ptr = reinterpret_cast<float *>(phone_buf_info.ptr);
-//     float *phone_hbTensor_ptr = reinterpret_cast<float *>(phone_input[0].sysMem.virAddr);
-//     std::memcpy(phone_hbTensor_ptr, phone_np_ptr, phone_buf_info.size * sizeof(float));
-
-//     for (int i = 0; i < output_count; i++)
-//     {
-//         hbUCPMemFlush(&phone_input[i].sysMem, HB_SYS_MEM_CACHE_INVALIDATE);
-//     }
-
-//     hbUCPTaskHandle_t phone_task_handle{nullptr};
-
-//     RDK_CHECK_SUCCESS(
-//         hbDNNInferV2(&phone_task_handle, phone_output.data(), phone_input.data(), dnn_handle),
-//         "BPU ACT Policy Vision Encoder phone_task hbDNNInferV2 failed");
-//     hbUCPSchedParam phone_ctrl_param;
-
-//     HB_UCP_INITIALIZE_SCHED_PARAM(&phone_ctrl_param);
-//     phone_ctrl_param.backend = HB_UCP_BPU_CORE_ANY;
-//     RDK_CHECK_SUCCESS(hbUCPSubmitTask(phone_task_handle, &phone_ctrl_param),
-//                       "BPU ACT Policy Vision Encoder phone_task hbUCPSubmitTask failed");
-
-//     // 为 TransformerLayers 准备输入数据
-//     float *state_np_ptr = reinterpret_cast<float *>(state_buf_info.ptr);
-//     float *state_hbTensor_ptr = reinterpret_cast<float *>(transformerLayers_input[0].sysMem.virAddr);
-//     std::memcpy(state_hbTensor_ptr, state_np_ptr, state_buf_info.size * sizeof(float));
-
-//     // 等待 laptop 的推理结束
-//     RDK_CHECK_SUCCESS(hbUCPWaitTaskDone(laptop_task_handle, 0),
-//                       "BPU ACT Policy Vision Encoder laptop_task hbUCPWaitTaskDone failed");
-
-//     for (int i = 0; i < output_count; i++)
-//     {
-//         hbUCPMemFlush(&laptop_output[i].sysMem, HB_SYS_MEM_CACHE_INVALIDATE);
-//     }
-
-//     // laptop_hbTensor_ptr = reinterpret_cast<float *>(laptop_output[0].sysMem.virAddr);
-//     RDK_CHECK_SUCCESS(hbUCPReleaseTask(laptop_task_handle), "BPU ACT Policy Vision Encoder laptop_task hbUCPReleaseTask failed");
-
-//     // 等待 phone 的推理结束
-//     RDK_CHECK_SUCCESS(hbUCPWaitTaskDone(phone_task_handle, 0),
-//                       "BPU ACT Policy Vision Encoder phone_task hbUCPWaitTaskDone failed");
-
-//     for (int i = 0; i < output_count; i++)
-//     {
-//         hbUCPMemFlush(&phone_output[i].sysMem, HB_SYS_MEM_CACHE_INVALIDATE);
-//     }
-
-//     // phone_hbTensor_ptr = reinterpret_cast<float *>(phone_output[0].sysMem.virAddr);
-//     RDK_CHECK_SUCCESS(hbUCPReleaseTask(phone_task_handle), "BPU ACT Policy Vision Encoder phone_task hbUCPReleaseTask failed");
-
-//     // 启动 TransformerLayers 的推理
-//     for (int i = 0; i < transformerLayers_input_count; i++)
-//     {
-//         hbUCPMemFlush(&transformerLayers_input[i].sysMem, HB_SYS_MEM_CACHE_INVALIDATE);
-//     }
-
-//     hbUCPTaskHandle_t transformerLayers_task_handle{nullptr};
-//     RDK_CHECK_SUCCESS(
-//         hbDNNInferV2(&transformerLayers_task_handle, transformerLayers_output.data(), transformerLayers_input.data(), transformerLayers_dnn_handle),
-//         "BPU ACT Policy TransformerLayers phone_task hbDNNInferV2 failed");
-
-//     hbUCPSchedParam transformerLayers_ctrl_param;
-//     HB_UCP_INITIALIZE_SCHED_PARAM(&transformerLayers_ctrl_param);
-//     phone_ctrl_param.backend = HB_UCP_BPU_CORE_ANY;
-//     RDK_CHECK_SUCCESS(hbUCPSubmitTask(transformerLayers_task_handle, &transformerLayers_ctrl_param),
-//                       "BPU ACT Policy TransformerLayers hbUCPSubmitTask failed");
-
-//     // 等待 TransformerLayers 推理结束
-//     RDK_CHECK_SUCCESS(hbUCPWaitTaskDone(transformerLayers_task_handle, 0),
-//                       "BPU ACT Policy TransformerLayers hbUCPWaitTaskDone failed");
-
-//     for (int i = 0; i < transformerLayers_output_count; i++)
-//     {
-//         hbUCPMemFlush(&transformerLayers_output[i].sysMem, HB_SYS_MEM_CACHE_INVALIDATE);
-//     }
-
-//     auto actions_hbTensor_ptr = reinterpret_cast<float *>(transformerLayers_output[0].sysMem.virAddr);
-//     RDK_CHECK_SUCCESS(hbUCPReleaseTask(transformerLayers_task_handle), "BPU ACT Policy TransformerLayers hbUCPReleaseTask failed");
-
-//     // 返回多维 NumPy 数组
-
-//     return py::array(shape, actions_hbTensor_ptr);
-// }

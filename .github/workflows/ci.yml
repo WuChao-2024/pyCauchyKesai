@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install ruff pytest pytest-cov mypy
+
+    - name: Lint with ruff
+      run: |
+        ruff check Nash/pyCauchyKesai/ tests/
+      continue-on-error: true
+
+    - name: Type check with mypy
+      run: |
+        mypy Nash/pyCauchyKesai/ --ignore-missing-imports
+      continue-on-error: true
+
+    - name: Run tests
+      run: |
+        pytest tests/ --cov=pyCauchyKesai --cov-report=xml --cov-report=term
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  check-formatting:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Check C++ formatting
+      uses: jidicula/clang-format-action@v4.11.0
+      with:
+        clang-format-version: '14'
+        check-path: 'Nash/src'
+        fallback-style: 'Google'
+
+  build-check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Check pyproject.toml syntax
+      run: |
+        python -m pip install --upgrade pip
+        pip install build
+        python -c "import tomllib; tomllib.load(open('Nash/pyproject.toml', 'rb'))"
+
+    - name: Validate package metadata
+      run: |
+        cd Nash
+        python -m build --sdist --no-isolation
+      continue-on-error: true
