@@ -12,12 +12,10 @@
 *.pch
 
 # Compiled Dynamic libraries
-
 *.so
 !Nash/lib/*.so
 *.dylib
 *.dll
-
 
 # Fortran module files
 *.mod
@@ -34,9 +32,52 @@
 *.out
 *.app
 
-
+# Build artifacts
 *build*
-*.vscode*
-*__pycache__
+*.whl
+*.egg-info/
+dist/
+*.tar.gz
 
-*linux_aarch64.whl
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# MyPy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Thumbnails
+._*

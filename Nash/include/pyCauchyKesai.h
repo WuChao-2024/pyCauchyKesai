@@ -14,6 +14,7 @@
 #include <cstring>
 #include <filesystem>
 #include <chrono>
+#include <atomic>
 
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
@@ -46,7 +47,6 @@ namespace py = pybind11;
 class __attribute__((visibility("default"))) CauchyKesai
 {
 public:
-  // ACTPloicyRGBEncoder();
   CauchyKesai(const std::string &model_path, int32_t n_task, int32_t model_cnt_select);
   ~CauchyKesai();
   py::dict s();
@@ -69,7 +69,7 @@ private:
   std::string model_path_;
   const char *modelFileName;
   int32_t n_task_;
-  std::vector<int> is_infer;
+  std::vector<std::atomic<int>> is_infer;
   std::vector<hbUCPTaskHandle_t> task_handles;
   hbDNNPackedHandle_t packed_dnn_handle;
   int32_t model_count;
@@ -96,9 +96,6 @@ private:
   std::vector<std::vector<size_t>> outputs_shape;
   std::vector<std::string> outputs_name;
   std::vector<std::string> outputs_dtype;
-
-  // pybind11 相关
-  // std::vector<std::vector<py::array>> results;
 
   // 统计标志
   double mbs;
