@@ -705,9 +705,9 @@ All source code is open-source. Please ensure you have sufficient understanding 
 ---
 
 
-## Appendix 1: Updating OpenExplore Header Files and Dynamic Libraries
+## Appendix 1: Updating OpenExplore Header Files and Dynamic Libraries (Nash / S100)
 
-When recompiling pyCauchyKesai, if you need to align with an updated version of the OpenExplore SDK, you must first replace the header files and dynamic libraries under `Nash/include/` and `Nash/lib/`, then re-execute `pip wheel .`.
+When recompiling pyCauchyKesai for Nash, if you need to align with an updated version of the OpenExplore SDK, you must first replace the header files and dynamic libraries under `Nash/include/` and `Nash/lib/`, then re-execute `pip wheel .`.
 
 Obtain the following files from the OpenExplore package:
 
@@ -833,5 +833,43 @@ Thread C:                             start() → [Release GIL] → BPU running.
 ```
 
 BPU inference across multiple threads truly overlaps execution; the GIL is held only briefly during memcpy and return value construction.
+
+---
+
+## Appendix 3: Updating OpenExplore Header Files and Dynamic Libraries (Bayes / X5)
+
+When recompiling pyCauchyKesai for Bayes (RDK X5), replace the header files and dynamic libraries under `Bayes/include/dnn/` and `Bayes/lib/`, then re-execute `pip wheel .`.
+
+Obtain the following files from the OpenExplore package:
+
+```
+package/host/host_package/x5_aarch64/dnn/
+├── include/dnn/   ← Header files (hb_dnn.h, hb_sys.h, hb_dnn_status.h, ...)
+└── lib/           ← Dynamic libraries (libdnn.so, libhbrt_bayes_aarch64.so)
+```
+
+**Update Bayes/include/dnn/:**
+
+```bash
+rm -rf pyCauchyKesai/Bayes/include/dnn
+cp -r /path/to/oe/package/host/host_package/x5_aarch64/dnn/include/dnn pyCauchyKesai/Bayes/include/
+```
+
+**Update Bayes/lib/:**
+
+```bash
+rm pyCauchyKesai/Bayes/lib/*.so
+cp /path/to/oe/package/host/host_package/x5_aarch64/dnn/lib/libdnn.so pyCauchyKesai/Bayes/lib/
+cp /path/to/oe/package/host/host_package/x5_aarch64/dnn/lib/libhbrt_bayes_aarch64.so pyCauchyKesai/Bayes/lib/
+```
+
+**Check Dynamic Library Version:**
+
+```bash
+strings pyCauchyKesai/Bayes/lib/libdnn.so | grep "Runtime version"
+# Runtime version = 1.24.5_(3.15.55 HBRT)
+```
+
+**Note:** Only `libdnn.so` and `libhbrt_bayes_aarch64.so` are packaged into the wheel. The transitive system dependencies (`libcnn_intf.so`, `libhbmem.so`, `libalog.so`) are provided by the RDK X5 system at `/usr/hobot/lib/` and are not included in the wheel.
 
 ---

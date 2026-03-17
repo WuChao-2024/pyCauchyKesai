@@ -707,7 +707,7 @@ np.copyto(model.input_tensors[task_id][0], x)
 ---
 
 
-## 附录1：更新 OpenExplore 头文件和动态库
+## 附录1：更新 OpenExplore 头文件和动态库（Nash / S100）
 
 重新编译 pyCauchyKesai 时，如果需要对齐到更新版本的 OpenExplore SDK，需要先替换 `Nash/include/` 和 `Nash/lib/` 下的头文件和动态库，再重新执行 `pip wheel .`。
 
@@ -835,5 +835,43 @@ U poll@GLIBC_2.17                     ← I/O 轮询等待
 ```
 
 多个线程的 BPU 推理真正重叠执行，GIL 只在 memcpy 和构造返回值时短暂持有。
+
+---
+
+## 附录3：更新 OpenExplore 头文件和动态库（Bayes / X5）
+
+重新编译 Bayes（RDK X5）版本时，需先替换 `Bayes/include/dnn/` 和 `Bayes/lib/` 下的头文件和动态库，再重新执行 `pip wheel .`。
+
+从 OpenExplore 包中获取以下文件：
+
+```
+package/host/host_package/x5_aarch64/dnn/
+├── include/dnn/   ← 头文件（hb_dnn.h、hb_sys.h、hb_dnn_status.h 等）
+└── lib/           ← 动态库（libdnn.so、libhbrt_bayes_aarch64.so）
+```
+
+**更新 Bayes/include/dnn/：**
+
+```bash
+rm -rf pyCauchyKesai/Bayes/include/dnn
+cp -r /path/to/oe/package/host/host_package/x5_aarch64/dnn/include/dnn pyCauchyKesai/Bayes/include/
+```
+
+**更新 Bayes/lib/：**
+
+```bash
+rm pyCauchyKesai/Bayes/lib/*.so
+cp /path/to/oe/package/host/host_package/x5_aarch64/dnn/lib/libdnn.so pyCauchyKesai/Bayes/lib/
+cp /path/to/oe/package/host/host_package/x5_aarch64/dnn/lib/libhbrt_bayes_aarch64.so pyCauchyKesai/Bayes/lib/
+```
+
+**查看动态库版本：**
+
+```bash
+strings pyCauchyKesai/Bayes/lib/libdnn.so | grep "Runtime version"
+# Runtime version = 1.24.5_(3.15.55 HBRT)
+```
+
+**说明：** wheel 包中只打包 `libdnn.so` 和 `libhbrt_bayes_aarch64.so`。传递依赖（`libcnn_intf.so`、`libhbmem.so`、`libalog.so`）由 RDK X5 系统在 `/usr/hobot/lib/` 提供，不打包进 wheel。
 
 ---

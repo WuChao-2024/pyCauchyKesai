@@ -14,6 +14,7 @@
 # Compiled Dynamic libraries
 *.so
 !Nash/lib/*.so
+!Bayes/lib/*.so
 *.dylib
 *.dll
 
