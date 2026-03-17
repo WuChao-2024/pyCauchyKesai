@@ -4,6 +4,17 @@
 
 pyCauchyKesai 是面向地平线（Horizon Robotics）BPU 平台的 AI Native 推理层，基于 pybind11 封装 C++ 实现，让 Python 开发者能够在 Nash-e / Nash-m 等边缘 AI 芯片上高效加载和运行 `.hbm` 神经网络模型。
 
+<p align="left">
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" height="25" />
+  <img src="https://img.shields.io/badge/Numpy-1.x/2.x-00A0E8?logo=numpy&logoColor=white" height="25" />
+  <img src="https://img.shields.io/badge/ONNX-1.20-61DAFB?logo=onnx&logoColor=white" height="25" />
+  <img src="https://img.shields.io/badge/RDK-S100-FF6F00?logo=rockstargames&logoColor=white" height="25" />
+  <img src="https://img.shields.io/badge/RDK-X5-FF6F00?logo=rockstargames&logoColor=white" height="25" />
+  <img src="https://img.shields.io/badge/Cauchy-Kesai-FF0000?logo=github&logoColor=white" height="25" />
+  <img src="https://img.shields.io/badge/License-AGPL--3.0-blue?logo=gnu&logoColor=white" height="25" />
+  
+</p>
+
 - 版本：`0.0.9`
 - 平台：Linux aarch64（地平线 RDK 系列开发板）
 - Python：>= 3.10
