@@ -58,10 +58,10 @@ This document summarizes the comprehensive improvements made to pyCauchyKesai to
   - API contracts and exception handling
   - Integration tests with mocked hardware
 - **Features:**
-  - No hardware dependency for CI/CD
+  - No hardware dependency for testing
   - Comprehensive test fixtures
   - Clear test documentation
-- **Impact:** Testable codebase, CI/CD ready, regression prevention
+- **Impact:** Testable codebase, regression prevention
 
 ### 7. Contributing Guidelines ✅
 **File:** `CONTRIBUTING.md`
@@ -76,19 +76,7 @@ This document summarizes the comprehensive improvements made to pyCauchyKesai to
   - Areas for contribution
 - **Impact:** Lower barrier for contributors, consistent code quality
 
-### 8. CI/CD Pipeline ✅
-**File:** `.github/workflows/ci.yml`
-
-- **Added:** GitHub Actions workflow
-- **Jobs:**
-  - Lint and test (Python 3.10, 3.11, 3.12)
-  - Type checking with mypy
-  - C++ formatting check with clang-format
-  - Build validation
-  - Coverage reporting to Codecov
-- **Impact:** Automated quality checks, continuous integration
-
-### 9. Code Formatting Configuration ✅
+### 8. Code Formatting Configuration ✅
 **File:** `.clang-format`
 
 - **Added:** clang-format configuration for C++ code
@@ -98,7 +86,7 @@ This document summarizes the comprehensive improvements made to pyCauchyKesai to
   - Allman brace style
 - **Impact:** Consistent C++ code formatting
 
-### 10. Enhanced .gitignore ✅
+### 9. Enhanced .gitignore ✅
 **File:** `.gitignore`
 
 - **Improved:** Comprehensive ignore patterns
@@ -117,7 +105,6 @@ This document summarizes the comprehensive improvements made to pyCauchyKesai to
 - Test coverage: 0%
 - Type hints: Partial (Python only)
 - Dead code: ~200 lines
-- CI/CD: None
 - Documentation: README only
 
 ### After
@@ -125,7 +112,6 @@ This document summarizes the comprehensive improvements made to pyCauchyKesai to
 - Test coverage: ~85% (Python layer)
 - Type hints: ✅ Complete .pyi stubs
 - Dead code: 0 lines
-- CI/CD: ✅ Full GitHub Actions pipeline
 - Documentation: README + CONTRIBUTING + inline docs + type stubs
 
 ## Architecture Improvements
@@ -145,7 +131,6 @@ After:  std::vector<std::atomic<int>> is_infer (lock-free, thread-safe)
 ```
 Hardware-dependent → Mocked C++ backend
 No tests → Comprehensive pytest suite
-Manual testing → Automated CI/CD
 ```
 
 ## Performance Impact
@@ -157,7 +142,7 @@ Manual testing → Automated CI/CD
 ## Compatibility
 
 - **Backward compatible:** All public APIs unchanged
-- **Python versions:** 3.10, 3.11, 3.12 tested in CI
+- **Python versions:** 3.10, 3.11, 3.12
 - **Platform:** Linux aarch64 (Horizon RDK series)
 
 ## Next Steps (Future Work)
@@ -185,7 +170,7 @@ Manual testing → Automated CI/CD
 These improvements bring pyCauchyKesai from a functional prototype to a production-ready, world-class library:
 
 ✅ **Correctness:** Thread-safe, no data races
-✅ **Quality:** Comprehensive tests, CI/CD, type safety
+✅ **Quality:** Comprehensive tests, type safety
 ✅ **Maintainability:** Clean code, documentation, contribution guidelines
 ✅ **Developer Experience:** Type stubs, IDE support, clear APIs
 ✅ **Professional:** Industry-standard tooling and practices

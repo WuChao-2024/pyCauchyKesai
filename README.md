@@ -16,7 +16,7 @@ pyCauchyKesai is a Python inference interface library designed for the Horizon R
 </p>
 
 
-- Version: `0.0.9`
+- Version: `0.2.0`
 - Platform: Linux aarch64 (Horizon RDK series development boards)
 - Python: >= 3.10
 - License: GNU AGPL v3
@@ -218,7 +218,7 @@ During the build process, pip automatically installs `scikit-build-core` and `py
 Upon completion, a whl file is generated in the current directory with the following filename format:
 
 ```
-pycauchykesai-0.0.8-cp312-cp312-linux_aarch64.whl
+pycauchykesai-0.2.0-cp312-cp312-linux_aarch64.whl
 #                   ^^^^  ^^^^  ^^^^^^^^^^^^^
 #                   Python Version  Platform
 ```
@@ -233,7 +233,7 @@ pip install pycauchykesai-*.whl
 
 ```bash
 python3 -c "import pyCauchyKesai; print(pyCauchyKesai.__version__)"
-# 0.0.8
+# 0.2.0
 ```
 
 ### Using the Same whl in Other Environments
@@ -241,7 +241,7 @@ python3 -c "import pyCauchyKesai; print(pyCauchyKesai.__version__)"
 As long as the Python version in the target environment matches the version tag in the whl filename, you can directly copy and install the whl file without recompiling:
 
 ```bash
-pip install pycauchykesai-0.0.8-cp312-cp312-linux_aarch64.whl
+pip install pycauchykesai-0.2.0-cp312-cp312-linux_aarch64.whl
 ```
 
 If the target environment has a different Python version (e.g., 3.10), switch to the corresponding environment and re-execute Steps 2 through 4 to generate a whl for that version.
@@ -847,41 +847,4 @@ Thread C:                             start() → [Release GIL] → BPU running.
 BPU inference across multiple threads truly overlaps execution; the GIL is held only briefly during memcpy and return value construction.
 
 ---
-
-## Appendix 3: Updating OpenExplore Header Files and Dynamic Libraries (Bayes / X5)
-
-When recompiling pyCauchyKesai for Bayes (RDK X5), replace the header files and dynamic libraries under `Bayes/include/dnn/` and `Bayes/lib/`, then re-execute `pip wheel .`.
-
-Obtain the following files from the OpenExplore package:
-
-```
-package/host/host_package/x5_aarch64/dnn/
-├── include/dnn/   ← Header files (hb_dnn.h, hb_sys.h, hb_dnn_status.h, ...)
-└── lib/           ← Dynamic libraries (libdnn.so, libhbrt_bayes_aarch64.so)
-```
-
-**Update Bayes/include/dnn/:**
-
-```bash
-rm -rf pyCauchyKesai/Bayes/include/dnn
-cp -r /path/to/oe/package/host/host_package/x5_aarch64/dnn/include/dnn pyCauchyKesai/Bayes/include/
-```
-
-**Update Bayes/lib/:**
-
-```bash
-rm pyCauchyKesai/Bayes/lib/*.so
-cp /path/to/oe/package/host/host_package/x5_aarch64/dnn/lib/libdnn.so pyCauchyKesai/Bayes/lib/
-cp /path/to/oe/package/host/host_package/x5_aarch64/dnn/lib/libhbrt_bayes_aarch64.so pyCauchyKesai/Bayes/lib/
-```
-
-**Check Dynamic Library Version:**
-
-```bash
-strings pyCauchyKesai/Bayes/lib/libdnn.so | grep "Runtime version"
-# Runtime version = 1.24.5_(3.15.55 HBRT)
-```
-
-**Note:** Only `libdnn.so` and `libhbrt_bayes_aarch64.so` are packaged into the wheel. The transitive system dependencies (`libcnn_intf.so`, `libhbmem.so`, `libalog.so`) are provided by the RDK X5 system at `/usr/hobot/lib/` and are not included in the wheel.
-
 ---

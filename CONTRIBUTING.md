@@ -122,7 +122,7 @@ Hardware-dependent tests should be placed in a separate `tests_hardware/` direct
    - Open a PR against the `main` branch
    - Fill out the PR template
    - Link related issues
-   - Wait for CI checks to pass
+   - Verify all checks pass
 
 6. **Code Review**
    - Address reviewer feedback
@@ -143,7 +143,7 @@ Hardware-dependent tests should be placed in a separate `tests_hardware/` direct
 - **Type stubs**: Enhance `.pyi` files with more detailed types
 - **Examples**: Add real-world usage examples
 - **Benchmarking**: Create comprehensive benchmark suite
-- **CI/CD**: Improve GitHub Actions workflows
+- **Automation**: Improve build and test automation
 
 ### Low Priority
 

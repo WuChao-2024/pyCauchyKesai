@@ -1,0 +1,26 @@
+[build-system]
+requires = ["scikit-build-core>=0.9,<0.12", "pybind11>=2.12"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "pyCauchyKesai"
+version = "0.2.0"
+description = "Python bindings for CauchyKesai (Nash-e/Nash-m/Nash-p BPU)"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Operating System :: POSIX :: Linux",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0", "pytest-benchmark"]
+
+[tool.scikit-build]
+cmake.source-dir = "csrc"
+cmake.args = [
+    "-DHB_PLATFORM={env:HB_PLATFORM:Nash-p}",
+    "-DHB_SYSROOT={env:HB_SYSROOT:/usr/hobot}",
+]
+wheel.py-api = "abi3"
+wheel.packages = ["src/pyCauchyKesai"]
