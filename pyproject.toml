@@ -1,26 +1,61 @@
 [build-system]
-requires = ["scikit-build-core>=0.9,<0.12", "pybind11>=2.12"]
+requires = ["scikit-build-core>=0.10,<1.0", "pybind11>=2.12"]
 build-backend = "scikit_build_core.build"
 
 [project]
 name = "pyCauchyKesai"
-version = "0.2.0"
+version = "1.4.0"
 description = "Python bindings for CauchyKesai (Nash-e/Nash-m/Nash-p BPU)"
 requires-python = ">=3.10"
+dependencies = [
+    "numpy>=1.21",
+]
 classifiers = [
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "License :: OSI Approved :: GNU Affero General Public License v3",
     "Operating System :: POSIX :: Linux",
+    "Architecture :: ARM64",
 ]
 
 [project.optional-dependencies]
 test = ["pytest>=7.0", "pytest-benchmark"]
+ez_onnx = ["onnxruntime>=1.14"]
 
 [tool.scikit-build]
 cmake.source-dir = "csrc"
-cmake.args = [
-    "-DHB_PLATFORM={env:HB_PLATFORM:Nash-p}",
-    "-DHB_SYSROOT={env:HB_SYSROOT:/usr/hobot}",
-]
-wheel.py-api = "abi3"
+# 不设 wheel.py-api：whl 标签跟随构建 Python 自动打标（3.12 构建→cp312-cp312），
+# 与内部扩展 .so（cpython-{构建版本}）对上；构建与部署须用同一个 Python 环境。
+# 详见 docs/cn_install.md「移植性说明」「构建 wheel」。
 wheel.packages = ["src/pyCauchyKesai"]
+wheel.install-dir = "pyCauchyKesai"
+
+# 不提供 editable install 配置 — 只允许 whl 构建方式
+# 详见 docs/cn_install.md
+
+# ── Python lint / 类型检查（详见 CONTRIBUTING_cn.md「代码风格」）──────────────
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src/pyCauchyKesai"]
+
+[tool.ruff.lint]
+# E/W=pycodestyle 风格, F=pyflakes 真 bug, I=isort import 排序,
+# UP=pyupgrade 语法升级, D=pydocstyle docstring 规范
+select = ["E", "F", "W", "I", "UP", "D"]
+ignore = ["D100", "D104", "D105"]   # 模块/包/魔术方法 docstring 按需
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D"]                  # 测试目录豁免 docstring 检查
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true      # numpy / native 模块无存根时不报错

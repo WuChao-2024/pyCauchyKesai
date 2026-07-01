@@ -29,7 +29,7 @@ def mem_location(arr):
     a = arr
     while a.base is not None:
         a = a.base
-    # 如果最底层是 as_array() 返回的 ndarray，它的 base 是 IONArray 的 capsule
+    # 如果最底层是 numpy() 返回的 ndarray，它的 base 是 IONArray 的 capsule
     # 简单判断: 如果 arr 拥有自己的 data (base is None)，就是独立 CPU 内存
     if arr.__array_interface__['data'][0] == a.__array_interface__['data'][0]:
         return "视图(共享)"
@@ -68,12 +68,12 @@ def yolo_ion(img, target=640):
 
     # float32 转换 + 写入 ION (一次拷贝)
     ion = IONArray(np.dtype('float32'), [1, 3, target, target])
-    a = ion.as_array()  # 拿到 numpy 视图引用
-    t0 = now(); a[:] = nchw_view.astype(np.float32);        steps.append(("→float32+写ION", now()-t0, "CPU新分配→ION", ion.mem_size))
+    a = ion.numpy()  # 拿到 numpy 视图引用
+    t0 = now(); a[:] = nchw_view.astype(np.float32);        steps.append(("→float32+写ION", now()-t0, "CPU新分配→ION", ion.nbytes))
 
     # normalize 在 ION 内存原地操作
     t0 = now(); a /= 255.0;                                 steps.append(("/255", now()-t0, "ION原地", 0))
-    t0 = now(); ion.flush();                      steps.append(("flush", now()-t0, "cache操作", 0))
+    t0 = now(); ion.flush_clean();                      steps.append(("flush", now()-t0, "cache操作", 0))
 
     return ion, steps
 
@@ -83,21 +83,21 @@ def yolo_ion_resize_direct(img, target=640):
 
     # resize 直接写入 ION
     ion_u8 = IONArray(np.dtype('uint8'), [target, target, 3])
-    t0 = now(); cv2.resize(img, (target, target), dst=ion_u8.as_array()); steps.append(("resize→ION", now()-t0, "直写ION", ion_u8.mem_size))
+    t0 = now(); cv2.resize(img, (target, target), dst=ion_u8.numpy()); steps.append(("resize→ION", now()-t0, "直写ION", ion_u8.nbytes))
 
     # BGR→RGB + HWC→CHW + 加batch维 (全是视图)
-    t0 = now(); rgb = ion_u8.as_array()[..., ::-1];             steps.append(("BGR→RGB", now()-t0, "视图(零拷贝)", 0))
+    t0 = now(); rgb = ion_u8.numpy()[..., ::-1];             steps.append(("BGR→RGB", now()-t0, "视图(零拷贝)", 0))
     t0 = now(); chw = rgb.transpose(2, 0, 1);               steps.append(("HWC→CHW", now()-t0, "视图(零拷贝)", 0))
     t0 = now(); nchw = chw[np.newaxis];                     steps.append(("加batch维", now()-t0, "视图(零拷贝)", 0))
 
     # uint8→float32 (不可避免) + 写入 ION
     ion_f32 = IONArray(np.dtype('float32'), [1, 3, target, target])
-    a = ion_f32.as_array()
-    t0 = now(); a[:] = nchw.astype(np.float32);              steps.append(("uint8→f32+写ION", now()-t0, "CPU新分配→ION", ion_f32.mem_size))
+    a = ion_f32.numpy()
+    t0 = now(); a[:] = nchw.astype(np.float32);              steps.append(("uint8→f32+写ION", now()-t0, "CPU新分配→ION", ion_f32.nbytes))
 
     # normalize 原地
     t0 = now(); a /= 255.0;                                  steps.append(("/255", now()-t0, "ION原地", 0))
-    t0 = now(); ion_f32.flush();                   steps.append(("flush", now()-t0, "cache操作", 0))
+    t0 = now(); ion_f32.flush_clean();                   steps.append(("flush", now()-t0, "cache操作", 0))
 
     return ion_f32, steps
 
@@ -138,8 +138,8 @@ def resnet_ion(img):
     t0 = now(); nchw = chw[np.newaxis];                steps.append(("加batch维", now()-t0, "视图(零拷贝)", 0))
 
     ion = IONArray(np.dtype('float32'), [1, 3, 224, 224])
-    a = ion.as_array()  # 拿到 numpy 视图引用
-    t0 = now(); a[:] = nchw.astype(np.float32);            steps.append(("→float32+写ION", now()-t0, "CPU新分配→ION", ion.mem_size))
+    a = ion.numpy()  # 拿到 numpy 视图引用
+    t0 = now(); a[:] = nchw.astype(np.float32);            steps.append(("→float32+写ION", now()-t0, "CPU新分配→ION", ion.nbytes))
 
     # 全部 ION 原地
     t0 = now(); a /= 255.0;                                steps.append(("/255", now()-t0, "ION原地", 0))
@@ -148,7 +148,7 @@ def resnet_ion(img):
         a[0, c] -= MEAN[c]
         a[0, c] /= STD[c]
     steps.append(("mean/std", now()-t0, "ION原地", 0))
-    t0 = now(); ion.flush();                     steps.append(("flush", now()-t0, "cache操作", 0))
+    t0 = now(); ion.flush_clean();                     steps.append(("flush", now()-t0, "cache操作", 0))
 
     return ion, steps
 
@@ -206,16 +206,16 @@ if __name__ == "__main__":
     bar("YOLO 前处理: ION 优化 (normalize 原地)")
     yolo_ion_arr, steps = yolo_ion(img)
     copies = print_steps(steps)
-    print(f"  → 拷贝次数: {copies}  输出: IONArray phy_addr={hex(yolo_ion_arr.phy_addr)}")
+    print(f"  → 拷贝次数: {copies}  输出: IONArray nbytes={yolo_ion_arr.nbytes}")
 
     bar("YOLO 前处理: ION 激进 (resize 直写 ION)")
     yolo_ion_aggressive, steps = yolo_ion_resize_direct(img)
     copies = print_steps(steps)
-    print(f"  → 拷贝次数: {copies}  输出: IONArray phy_addr={hex(yolo_ion_aggressive.phy_addr)}")
+    print(f"  → 拷贝次数: {copies}  输出: IONArray nbytes={yolo_ion_aggressive.nbytes}")
 
     # 精度对比
-    yolo_ion_data = yolo_ion_arr.as_array().copy()
-    yolo_ion_agg_data = yolo_ion_aggressive.as_array().copy()
+    yolo_ion_data = yolo_ion_arr.numpy().copy()
+    yolo_ion_agg_data = yolo_ion_aggressive.numpy().copy()
     ok1 = check_equal(yolo_cpu, yolo_ion_data)
     ok2 = check_equal(yolo_cpu, yolo_ion_agg_data)
     print(f"\n  CPU vs ION优化:      {'OK' if ok1 else 'FAIL'}")
@@ -232,10 +232,10 @@ if __name__ == "__main__":
     bar("ResNet 前处理: ION 优化 (normalize 原地)")
     rn_ion_arr, steps = resnet_ion(img)
     copies = print_steps(steps)
-    print(f"  → 拷贝次数: {copies}  输出: IONArray phy_addr={hex(rn_ion_arr.phy_addr)}")
+    print(f"  → 拷贝次数: {copies}  输出: IONArray nbytes={rn_ion_arr.nbytes}")
 
     # 精度对比
-    rn_ion_data = rn_ion_arr.as_array().copy()
+    rn_ion_data = rn_ion_arr.numpy().copy()
     ok3 = check_equal(rn_cpu, rn_ion_data)
     print(f"\n  CPU vs ION:          {'OK' if ok3 else 'FAIL'}")
 
@@ -248,10 +248,10 @@ if __name__ == "__main__":
         ["cv2.resize",    "可直写ION", "dst= 参数可指定输出数组", "IONArray(uint8) 作为 dst"],
         ["BGR→RGB",       "视图",   "[...,::-1] 是 numpy view",  "—"],
         ["uint8→float32", "不可",   "元素大小变化 (1B→4B)",       "astype 必然新分配"],
-        ["/255 归一化",   "可ION原地", "/= 操作直接改 ION 内存",  "ion.as_array() /= 255.0"],
+        ["/255 归一化",   "可ION原地", "/= 操作直接改 ION 内存",  "ion.numpy() /= 255.0"],
         ["HWC→CHW",       "视图",   "transpose 是 numpy view",    "—"],
         ["加 batch 维",   "视图",   "np.newaxis 是 numpy view",   "—"],
-        ["mean/std",      "可ION原地", "-= /= 操作直接改 ION 内存", "ion.as_array()[0,c] -= mean"],
+        ["mean/std",      "可ION原地", "-= /= 操作直接改 ION 内存", "ion.numpy()[0,c] -= mean"],
         ["flush",         "仅cached", "无 cache 则 no-op",        "uncached 免 flush"],
     ])
     print()

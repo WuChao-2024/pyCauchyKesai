@@ -26,6 +26,21 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "nash: Nash 系列 (Nash-e/Nash-m/Nash-p) 平台")
     config.addinivalue_line("markers", "benchmark: 性能基准")
     config.addinivalue_line("markers", "slow: 耗时测试")
+    # 多维度接口一致性测试套件的正交 marker（可叠加，如 @dim4 @dim5）
+    for spec in (
+        "dim1: D1 算子/结构一致性（刻画）",
+        "dim2: D2 张量形态（rank/shape）",
+        "dim3: D3 IO 元数（单/多 输入输出）",
+        "dim4: D4 推理路径 7 路 cross-path 一致性",
+        "dim5: D5 内存/对齐（零拷贝 + padded/strided）",
+        "dim6: D6 量化/反量化（SCALE 路径）",
+        "dim7: D7 核数等价（core1 vs core2）",
+        "dim8: D8 并发语义（n_task/交错/超时）",
+        "dim9: D9 错误路径鲁棒性",
+        "dim10: D10 确定性（同输入逐元素相等）",
+        "dim11: D11 API 元数据契约",
+    ):
+        config.addinivalue_line("markers", spec)
 
 
 def pytest_collection_modifyitems(config, items):

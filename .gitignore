@@ -11,8 +11,7 @@
 *.gch
 *.pch
 
-# Compiled Dynamic libraries
-
+# Compiled Dynamic libraries (excluding .so — we ship .so in csrc/nash/lib/)
 *.dylib
 *.dll
 
@@ -31,39 +30,48 @@
 *.out
 *.app
 
-# Build artifacts
-*build*
+# ========= Build artifacts =========
+# scikit-build CMake build directory
+/build/
+
+# Wheel / dist output
+/dist/
 *.whl
 *.egg-info/
-dist/
 *.tar.gz
 
-# IDE
+# pybind11 native extension (built, not source)
+src/pyCauchyKesai/*.so
+
+# Packaged runtime .so libs (copied from /usr/hobot/lib at build time)
+src/pyCauchyKesai/lib/
+
+# ========= IDE =========
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Python
+# ========= Python =========
 __pycache__/
 *.py[cod]
 *$py.class
 .Python
 
-# Testing
+# ========= Testing =========
 .pytest_cache/
 .coverage
 htmlcov/
 .tox/
 .hypothesis/
 
-# MyPy
+# ========= MyPy =========
 .mypy_cache/
 .dmypy.json
 dmypy.json
 
-# Environments
+# ========= Environments =========
 .env
 .venv
 env/
@@ -72,10 +80,13 @@ ENV/
 env.bak/
 venv.bak/
 
-# macOS
+# ========= macOS =========
 .DS_Store
 .AppleDouble
 .LSOverride
-
-# Thumbnails
 ._*
+
+
+# skills
+.understand-anything
+.ruff_cache

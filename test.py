@@ -32,13 +32,13 @@ def main():
     # 初始化
     val = np.float32(2.71828)
     print(f"初始化: arr[:] = {val}", flush=True)
-    arr.as_array()[:] = val
+    arr.numpy()[:] = val
 
     # 原地逐元素乘法
     factor = np.float32(3.14159)
     print(f"原地乘法: arr *= {factor}", flush=True)
     t2 = time.time()
-    arr.as_array() *= factor
+    arr.numpy() *= factor
     t3 = time.time()
     dt = t3 - t2
 
@@ -49,9 +49,9 @@ def main():
 
     # 验证
     expected = val * factor
-    print(f"\n验证: arr[0]  = {arr.as_array()[0]}  (期望 {expected})")
-    print(f"       arr[1]  = {arr.as_array()[1]}")
-    print(f"       arr[-1] = {arr.as_array()[-1]}")
+    print(f"\n验证: arr[0]  = {arr.numpy()[0]}  (期望 {expected})")
+    print(f"       arr[1]  = {arr.numpy()[1]}")
+    print(f"       arr[-1] = {arr.numpy()[-1]}")
     print("完成!")
 
 
